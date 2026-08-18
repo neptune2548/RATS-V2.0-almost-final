@@ -351,6 +351,47 @@ async def push_program(machine_id: str, body: dict | None = None) -> JSONRespons
     return JSONResponse({"result": result, "machine": machine, "events": event_log[-100:]})
 
 
+@app.post("/api/machines/{machine_id}/delete")
+async def delete_program(machine_id: str, body: dict | None = None) -> JSONResponse:
+    """Delete a recipe program from a machine via SECS/GEM."""
+    machine = machines.get(machine_id)
+    if machine is None:
+        return JSONResponse({"error": "Machine not found"}, status_code=404)
+
+    program_name = (body or {}).get("program_name", "").strip()
+    if not program_name:
+        return JSONResponse({"error": "program_name is required"}, status_code=400)
+
+    add_event({"EN": f"Initiating recipe deletion (DELETE) for program '{program_name}' on {machine['name']}...", "TH": f"กำลังเริ่มลบสูตร '{program_name}' จากเครื่อง {machine['name']}..."}, "INFO")
+    await broadcast_state()
+
+    machine["status"] = "DELETING"
+    await broadcast_state()
+
+    loop = asyncio.get_running_loop()
+    log_callback = make_log_callback(loop)
+
+    from testdelete import run_delete
+    try:
+        result = await asyncio.to_thread(run_delete, machine_id, program_name, log_callback)
+        if result.get("status") == "ok":
+            machine["link_status"] = "ONLINE"
+            if machine.get("current_program") == program_name:
+                machine["current_program"] = "None"
+        else:
+            machine["link_status"] = "OFFLINE"
+    except Exception as e:
+        result = {"status": "error", "message": str(e)}
+        machine["link_status"] = "OFFLINE"
+        add_event({"EN": f"Deletion sequence failed: {e}", "TH": f"กระบวนการลบล้มเหลว: {e}"}, "ALERT")
+        await broadcast_state()
+
+    machine["status"] = "IDLE"
+    await broadcast_state()
+
+    return JSONResponse({"result": result, "machine": machine, "events": event_log[-100:]})
+
+
 @app.get("/api/machines/{machine_id}/recipes")
 async def list_recipes(machine_id: str) -> JSONResponse:
     """List available .PWB recipe files from BondingProg root (excludes subdirs)."""

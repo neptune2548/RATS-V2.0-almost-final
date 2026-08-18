@@ -276,6 +276,47 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
     }
   };
 
+  // Delete Recipe
+  const handleDeleteRecipe = async () => {
+    if (!hasPushPermission()) {
+      onRequireElevatedAuth(ROLES.TECHNICIAN);
+      return;
+    }
+
+    const programToDelete = customProgramInput.trim();
+    if (!programToDelete) {
+      setActionStatus({ type: 'DELETE', status: 'ERROR', msg: 'Please enter a recipe program name to delete.' });
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete '${programToDelete}' from ${activeMachine.name}? This action cannot be undone.`)) {
+      return;
+    }
+
+    setActionStatus({ type: 'DELETE', status: 'RUNNING', msg: `Executing Recipe Deletion '${programToDelete}' from ${activeMachine.name}...` });
+
+    try {
+      const res = await fetch(`${RATS_API_BASE}/api/machines/${encodeURIComponent(activeMachine.id)}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ program_name: programToDelete })
+      });
+      const data = await res.json();
+      if (data.result && data.result.status === 'ok') {
+        setActionStatus({ type: 'DELETE', status: 'SUCCESS', msg: `Recipe Deletion SUCCESS: Removed '${programToDelete}' from ${activeMachine.name}` });
+        setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, current_program: (m.current_program === programToDelete ? 'None' : m.current_program), link_status: 'ONLINE' } : m));
+        // Clear input after successful delete
+        setCustomProgramInput('');
+      } else {
+        const err = data.result?.message || data.error || 'Delete failed';
+        setActionStatus({ type: 'DELETE', status: 'ERROR', msg: `Recipe Deletion FAILED: ${err}` });
+        setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, link_status: 'OFFLINE' } : m));
+      }
+    } catch (err) {
+      setActionStatus({ type: 'DELETE', status: 'ERROR', msg: `Network request failed: ${err.message}` });
+    }
+  };
+
   // Purge logs endpoint call
   const handleClearLogs = async () => {
     try {
@@ -541,6 +582,15 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
                         {showRecipeDropdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      onClick={handleDeleteRecipe}
+                      disabled={actionStatus?.status === 'RUNNING'}
+                      title="Delete recipe from machine"
+                      className="ml-2 p-1.5 bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-800 rounded text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors focus:outline-none disabled:opacity-50 flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                     {showRecipeDropdown && availableRecipes.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white/90 dark:bg-slate-800/95 backdrop-blur-md border border-slate-300 dark:border-slate-700 rounded shadow-xl max-h-48 overflow-y-auto">
                         {availableRecipes

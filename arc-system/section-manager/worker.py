@@ -342,10 +342,56 @@ def handle_command(host, machine_id, cmd):
         _handle_pull_recipe(host, machine_id, cmd)
     elif action == "push_recipe":
         _handle_push_recipe(host, machine_id, cmd)
+    elif action == "delete_recipe":
+        _handle_delete_recipe(host, machine_id, cmd)
     else:
         msg = {"EN": f"Unknown command '{action}' received. Ignoring.",
                "TH": f"ได้รับคำสั่ง '{action}' ที่ไม่รู้จัก ข้ามไป"}
         log(machine_id, msg, "ALERT")
+        write_command_result(machine_id, "error", msg)
+
+def _handle_delete_recipe(host, machine_id, cmd):
+    recipe_name = cmd.get("recipe", "").strip()
+    if not recipe_name:
+        write_command_result(machine_id, "error", {"EN": "Missing recipe name", "TH": "ไม่ได้ระบุชื่อสูตร"})
+        return
+        
+    log(machine_id, {"EN": f"Deleting recipe '{recipe_name}' from machine...", "TH": f"กำลังลบสูตร '{recipe_name}' ออกจากเครื่อง..."}, "INFO")
+    
+    try:
+        s7f17 = SecsS07F17([recipe_name])
+        response = host.send_and_waitfor_response(s7f17)
+        if response is None or response.header.function != 18:
+            msg = {"EN": "No valid S7F18 response received.", "TH": "ไม่ได้รับการตอบกลับ S7F18"}
+            log(machine_id, msg, "ALERT")
+            write_command_result(machine_id, "error", msg)
+            return
+            
+        s7f18 = SecsS07F18()
+        s7f18.decode(response.data)
+        raw_ackc7 = s7f18.get()
+        
+        if isinstance(raw_ackc7, (list, tuple)) and len(raw_ackc7) > 0:
+            ackc7_val = int(raw_ackc7[0])
+        elif isinstance(raw_ackc7, bytes) and len(raw_ackc7) > 0:
+            ackc7_val = int(raw_ackc7[0])
+        elif raw_ackc7 is not None:
+            ackc7_val = int(raw_ackc7)
+        else:
+            ackc7_val = -1
+            
+        if ackc7_val == 0:
+            msg = {"EN": f"Recipe '{recipe_name}' successfully deleted.", "TH": f"ลบสูตร '{recipe_name}' สำเร็จ"}
+            log(machine_id, msg, "SUCCESS")
+            write_command_result(machine_id, "ok", {"message": msg, "ackc7": ackc7_val})
+        else:
+            msg = {"EN": f"Equipment rejected deletion (ACKC7={ackc7_val}).", "TH": f"เครื่องจักรปฏิเสธการลบ (ACKC7={ackc7_val})"}
+            log(machine_id, msg, "ALERT")
+            write_command_result(machine_id, "error", {"message": msg, "ackc7": ackc7_val})
+            
+    except Exception as e:
+        msg = {"EN": f"Delete failed: {e}", "TH": f"ลบล้มเหลว: {e}"}
+        log(machine_id, msg, "ERROR")
         write_command_result(machine_id, "error", msg)
 
     clear_command(machine_id)
