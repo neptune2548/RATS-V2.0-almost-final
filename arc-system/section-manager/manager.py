@@ -24,6 +24,11 @@ import subprocess
 import sys
 import time
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from pathlib import Path
 # Derive project root dynamically — works on any machine regardless of install path
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]  # arc-system/section-manager -> project root
