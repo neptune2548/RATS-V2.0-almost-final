@@ -24,6 +24,6 @@ echo.
 echo  ✅ All services have been successfully shut down!
 echo.
 echo  Cleaning up all terminal windows...
-taskkill /F /IM WindowsTerminal.exe >nul 2>&1
-taskkill /F /IM powershell.exe >nul 2>&1
-taskkill /F /IM cmd.exe >nul 2>&1
+:: Target specifically the windows launched by the start script
+taskkill /F /FI "WINDOWTITLE eq ARC — *" /T >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq ARC Industrial Command Center*" /T >nul 2>&1
