@@ -4,9 +4,9 @@ import os
 import time
 import sys
 from pathlib import Path
-# Derive project root dynamically — works on any machine regardless of install path
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]  # arc-system/client-rats -> project root
-sys.path.insert(0, str(_PROJECT_ROOT))
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(_PROJECT_ROOT))
 from database import MACHINE_DB
 
 logging.basicConfig(level=logging.INFO)

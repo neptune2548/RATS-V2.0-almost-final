@@ -840,8 +840,8 @@ def run_worker(machine_id):
             }, "SUCCESS")
 
             consecutive_failures = 0
-            last_poll_time = 0
-            last_cmd_time = 0
+            last_poll_time = -POLL_INTERVAL_SEC  # Fire first poll immediately on connect
+            last_cmd_time  = 0
 
             # ── Inner polling loop (stays here while connection is alive) ──
             while not shutdown_requested:

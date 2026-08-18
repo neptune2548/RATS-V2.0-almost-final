@@ -16,11 +16,12 @@ from fastapi.staticfiles import StaticFiles
 
 import sys
 from pathlib import Path
-# Derive project root dynamically — works on any machine regardless of install path
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]  # arc-system/client-rats -> project root
-sys.path.insert(0, str(_PROJECT_ROOT))
-from database import MACHINE_DB, SERIAL_TO_MACHINE
+_CLIENT_RATS_DIR = Path(__file__).resolve().parent          # for testpull / testpush
+_PROJECT_ROOT    = Path(__file__).resolve().parents[2]      # for database.py (single source of truth)
+sys.path.insert(0, str(_PROJECT_ROOT))    # root first so database.py is unambiguous
+sys.path.insert(0, str(_CLIENT_RATS_DIR)) # client-rats on top so local testpull/testpush win
 
+from database import MACHINE_DB, SERIAL_TO_MACHINE
 from testpull import run_pull
 from testpush import run_push, find_closest_recipe, _strip_recipe_stem
 
