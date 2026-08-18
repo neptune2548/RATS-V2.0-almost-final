@@ -31,7 +31,7 @@ start http://localhost:3000
 :: ── 4. Check for node_modules and install if missing ────────────────────────
 cd /d "%~dp0arc-system\client-shell"
 if not exist "node_modules\" (
-    echo  [%TIME%] Installing React dependencies (this may take a moment)...
+    echo  [%TIME%] Installing React dependencies, this may take a moment...
     call npm install
 )
 
