@@ -86,13 +86,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     }
 
     auto on_recipe_change = [&](const std::string& path, const std::string& ppid,
-                                const std::vector<char>& content,
-                                unsigned long long source_modified_ms) -> bool {
+                                const std::vector<char>& content) -> bool {
         LOG_INFO("App: New or changed recipe: PPID='" + ppid + "' path=" + path);
         const size_t slash = path.find_last_of("\\/");
         const std::string source_name = slash == std::string::npos ? path : path.substr(slash + 1);
         if (channel->is_host_connected()) {
-            const FileChannelResult check = channel->check_recipe(content, source_name, ppid, source_modified_ms);
+            const FileChannelResult check = channel->check_recipe(content, source_name, ppid);
             if (check.ok && check.server_status == "identical") {
                 LOG_INFO("App: Host already has identical PPID='" + ppid + "'; feedback popup suppressed.");
                 return true;
@@ -104,7 +103,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         }
         // queue_recipe commits this exact detected snapshot to disk before it
         // reports success. A later NPGM overwrite cannot change the queued PWB.
-        const FileChannelResult result = channel->queue_recipe(content, source_name, ppid, source_modified_ms);
+        const FileChannelResult result = channel->queue_recipe(content, source_name, ppid);
         if (!result.ok) {
             LOG_ERROR("App: Recipe could not be queued: " + result.message);
             tray->show_balloon("Transfer Failed", result.message, NIIF_ERROR);

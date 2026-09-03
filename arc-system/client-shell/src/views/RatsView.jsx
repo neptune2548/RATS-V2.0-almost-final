@@ -72,6 +72,8 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
   const [deploymentFiles, setDeploymentFiles] = useState([]);
   const [deploymentBusy, setDeploymentBusy] = useState(false);
   const [isMachineExpanded, setIsMachineExpanded] = useState(false);
+  const [pullMode, setPullMode] = useState('all');
+  const [singlePullRecipe, setSinglePullRecipe] = useState('');
 
   const wsRef = useRef(null);
   const selectedMachineIdRef = useRef(selectedMachineId);
@@ -322,24 +324,27 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
 
 
   // Pull Recipe
-  const handlePullRecipe = async () => {
+  const handlePullRecipe = async (recipeName = '') => {
     if (!activeMachine.id) return;
-    setActionStatus({ type: 'PULL', status: 'RUNNING', msg: `Executing Recipe Pull for ${activeMachine.name}...` });
+    const selectedRecipe = recipeName.trim();
+    const pullDescription = selectedRecipe ? `recipe '${selectedRecipe}'` : 'all recipes';
+    setActionStatus({ type: 'PULL', status: 'RUNNING', msg: `Executing Recipe Pull for ${pullDescription} from ${activeMachine.name}...` });
     setEventLogs(prev => [...prev, {
       timestamp: new Date().toISOString(),
       level: 'INFO',
       machine_id: activeMachine.id,
       production_section: machineSectionId(activeMachine),
       message: {
-        EN: `Starting Recipe Pull for ${activeMachine.name}...`,
-        TH: `กำลังเริ่มดึงสูตร (PULL) สำหรับ ${activeMachine.name}...`,
+        EN: `Starting Recipe Pull for ${pullDescription} from ${activeMachine.name}...`,
+        TH: `กำลังเริ่มดึง${selectedRecipe ? `สูตร '${selectedRecipe}'` : 'สูตรทั้งหมด'} จาก ${activeMachine.name}...`,
       },
     }].slice(-100));
 
     try {
       const res = await fetch(`${RATS_API_BASE}/api/machines/${encodeURIComponent(activeMachine.id)}/pull`, {
         method: 'POST',
-        headers: authHeaders()
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(selectedRecipe ? { recipe_name: selectedRecipe } : {})
       });
       if (res.status === 401) {
         logoutToGuest();
@@ -349,7 +354,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
       const data = await res.json();
       if (data.events) setEventLogs(data.events);
       if (data.result && data.result.status === 'ok') {
-        setActionStatus({ type: 'PULL', status: 'SUCCESS', msg: `Recipe Pull SUCCESS for ${activeMachine.name}` });
+        setActionStatus({ type: 'PULL', status: 'SUCCESS', msg: `Recipe Pull SUCCESS for ${pullDescription} from ${activeMachine.name}` });
         setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, link_status: 'ONLINE' } : m));
       } else {
         const err = data.result?.message || data.error || data.detail || 'Pull failed';
@@ -794,28 +799,68 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
               </div>
             )}
 
-            {/* SECS/GEM Workflow Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Pull selected recipe: intentionally separate from Pull All below. */}
+            <div className="rounded border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                    {language === 'TH' ? 'ดึงสูตรรายชื่อ (Pull ทีละสูตร)' : 'Pull selected recipe'}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-slate-600 dark:text-slate-400">
+                    {language === 'TH' ? 'ระบุชื่อสูตรตรงจากเครื่อง ระบบจะเขียนทับสูตรชื่อเดิมใน Host เมื่อดึงสำเร็จ' : 'Enter an exact equipment recipe name. A successful pull replaces the same Host recipe.'}
+                  </div>
+                </div>
+                <div className="flex rounded border border-amber-300 bg-white p-0.5 text-[10px] font-bold dark:border-amber-800 dark:bg-slate-900">
+                  <button type="button" onClick={() => setPullMode('all')} className={`rounded px-2 py-1 ${pullMode === 'all' ? 'bg-amber-500 text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                    {language === 'TH' ? 'Pull All' : 'Pull All'}
+                  </button>
+                  <button type="button" onClick={() => setPullMode('single')} className={`rounded px-2 py-1 ${pullMode === 'single' ? 'bg-amber-500 text-white' : 'text-slate-600 dark:text-slate-300'}`}>
+                    {language === 'TH' ? 'รายชื่อเดียว' : 'Single recipe'}
+                  </button>
+                </div>
+              </div>
 
-              {isGuestUser ? (
-                <button
-                  type="button"
-                  onClick={() => notifyRestrictedAccess(ROLES.OPERATOR)}
-                  className="p-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded font-mono-industrial text-[11px] font-bold text-slate-400 flex flex-col items-center gap-1 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <Lock className="w-4 h-4 text-amber-500" />
-                  <span>{t('pull_recipe')}</span>
-                </button>
-              ) : (
-                <button
-                  onClick={handlePullRecipe}
-                  disabled={actionStatus?.status === 'RUNNING'}
-                  className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded font-mono-industrial text-[11px] font-bold text-slate-800 dark:text-slate-200 flex flex-col items-center gap-1 transition-colors"
-                >
-                  <Download className="w-4 h-4 text-amber-500" />
-                  <span>{t('pull_recipe')}</span>
-                </button>
+              {pullMode === 'single' && (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={singlePullRecipe}
+                    onChange={(event) => setSinglePullRecipe(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && singlePullRecipe.trim() && !isGuestUser) handlePullRecipe(singlePullRecipe);
+                    }}
+                    placeholder={language === 'TH' ? 'ชื่อสูตรจากเครื่องจักร เช่น RECIPE-001' : 'Exact equipment recipe name, e.g. RECIPE-001'}
+                    className="min-w-0 flex-1 rounded border border-amber-300 bg-white px-3 py-2 font-mono text-xs text-slate-800 outline-none focus:border-amber-500 dark:border-amber-800 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    disabled={!singlePullRecipe.trim() || actionStatus?.status === 'RUNNING'}
+                    onClick={() => isGuestUser ? notifyRestrictedAccess() : handlePullRecipe(singlePullRecipe)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded bg-amber-500 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isGuestUser ? <Lock className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                    {language === 'TH' ? 'Pull สูตรนี้' : 'Pull this recipe'}
+                  </button>
+                </div>
               )}
+
+              {pullMode === 'all' && (
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <span className="text-[10px] text-slate-600 dark:text-slate-400">{language === 'TH' ? 'Pull All จะดึงเฉพาะสูตรใหม่ที่ไม่มีใน Host' : 'Pull All retrieves recipes that are not already on the Host.'}</span>
+                  <button
+                    type="button"
+                    disabled={actionStatus?.status === 'RUNNING'}
+                    onClick={() => isGuestUser ? notifyRestrictedAccess() : handlePullRecipe()}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded border border-amber-400 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900 dark:text-amber-300 dark:hover:bg-amber-950"
+                  >
+                    {isGuestUser ? <Lock className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                    Pull All
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* SECS/GEM Workflow Buttons */}
+            <div className="grid grid-cols-1 gap-3">
 
               {hasPushPermission() ? (
                 <button

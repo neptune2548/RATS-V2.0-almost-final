@@ -56,9 +56,12 @@ def _send_command_and_wait(machine_id: str, cmd: dict, timeout: int = 30) -> dic
     return {"status": "error", "message": {"EN": "Command timed out waiting for worker.", "TH": "คำสั่งหมดเวลารอจาก worker"}}
 
 
-def run_pull(machine_id: str, log_callback=None) -> dict:
+def run_pull(machine_id: str, log_callback=None, recipe_names: list[str] | None = None) -> dict:
     """
-    Pull (sync) all new recipes from a machine by sending commands to the active worker.
+    Pull recipes from a machine by sending commands to the active worker.
+    When ``recipe_names`` is provided, each named recipe is requested directly
+    and replaces the host copy on success.  This supports operator-selected
+    recovery pulls without requiring an S7F19 inventory response first.
     """
     def log(message: str, level: str = "INFO"):
         if log_callback:
@@ -83,25 +86,32 @@ def run_pull(machine_id: str, log_callback=None) -> dict:
     skipped = []
 
     try:
-        # ── 2. Request recipe list ──────────────────────────
-        log({
-            "EN": "Requesting recipe inventory from equipment...",
-            "TH": "กำลังขอรายการสูตรจากเครื่องจักร..."
-        }, "INFO")
-        
-        list_res = _send_command_and_wait(machine_id, {"action": "pull_recipe_list"})
-        
-        if not list_res or list_res.get("status") != "ok":
-            msg = list_res.get("message", {"EN": "Failed to get recipe list."})
-            log(msg, "ALERT")
-            return {"status": "error", "message": msg.get("EN", ""), "pulled": [], "skipped": []}
-            
-        recipe_list = list_res.get("message", {}).get("recipes", [])
-        if not recipe_list:
-            log({"EN": "Machine returned an empty recipe list.", "TH": "เครื่องจักรส่งรายการสูตรว่างเปล่ามาให้"}, "ALERT")
-            return {"status": "ok", "message": "No recipes found.", "pulled": [], "skipped": []}
+        requested_recipes = [str(name).strip() for name in (recipe_names or []) if str(name).strip()]
+        if requested_recipes:
+            new_recipes = list(dict.fromkeys(requested_recipes))
+            log({
+                "EN": f"Pulling {len(new_recipes)} selected recipe(s) directly from equipment...",
+                "TH": f"กำลังดึงสูตรที่เลือก {len(new_recipes)} รายการจากเครื่องจักรโดยตรง..."
+            }, "INFO")
+        else:
+            # ── 2. Request recipe list ──────────────────────────
+            log({
+                "EN": "Requesting recipe inventory from equipment...",
+                "TH": "กำลังขอรายการสูตรจากเครื่องจักร..."
+            }, "INFO")
 
-        # ── 3. Compare with local ─────────────────────────────────────────────
+            list_res = _send_command_and_wait(machine_id, {"action": "pull_recipe_list"})
+
+            if not list_res or list_res.get("status") != "ok":
+                msg = list_res.get("message", {"EN": "Failed to get recipe list."})
+                log(msg, "ALERT")
+                return {"status": "error", "message": msg.get("EN", ""), "pulled": [], "skipped": []}
+
+            recipe_list = list_res.get("message", {}).get("recipes", [])
+            if not recipe_list:
+                log({"EN": "Machine returned an empty recipe list.", "TH": "เครื่องจักรส่งรายการสูตรว่างเปล่ามาให้"}, "ALERT")
+                return {"status": "ok", "message": "No recipes found.", "pulled": [], "skipped": []}
+
         save_directory = str(_PROJECT_ROOT / "BondingProg")
         os.makedirs(save_directory, exist_ok=True)
 
@@ -114,34 +124,35 @@ def run_pull(machine_id: str, log_callback=None) -> dict:
                 name = name[:-3]
             return name
 
-        local_files = {_strip_to_clean_name(f) for f in os.listdir(save_directory) if f.upper().endswith(".PWB")}
+        if not requested_recipes:
+            local_files = {_strip_to_clean_name(f) for f in os.listdir(save_directory) if f.upper().endswith(".PWB")}
 
-        # Strip .WB suffix from remote recipe names for comparison
-        remote_clean_map = {}  # clean_name -> original_remote_name
-        for r in recipe_list:
-            clean = _strip_to_clean_name(r)
-            remote_clean_map[clean] = r
+            # Strip .WB suffix from remote recipe names for comparison
+            remote_clean_map = {}  # clean_name -> original_remote_name
+            for r in recipe_list:
+                clean = _strip_to_clean_name(r)
+                remote_clean_map[clean] = r
 
-        remote_clean_names = set(remote_clean_map.keys())
-        new_clean_names = list(remote_clean_names - local_files)
+            remote_clean_names = set(remote_clean_map.keys())
+            new_clean_names = list(remote_clean_names - local_files)
 
-        # Map back to original remote names for download
-        new_recipes = [remote_clean_map[c] for c in new_clean_names]
+            # Map back to original remote names for download
+            new_recipes = [remote_clean_map[c] for c in new_clean_names]
         
-        log({
-            "EN": f"Found {len(remote_clean_names)} recipes on equipment. {len(new_recipes)} are new.",
-            "TH": f"พบสูตร {len(remote_clean_names)} รายการบนเครื่องจักร เป็นสูตรใหม่ {len(new_recipes)} รายการ"
-        }, "INFO")
+            log({
+                "EN": f"Found {len(remote_clean_names)} recipes on equipment. {len(new_recipes)} are new.",
+                "TH": f"พบสูตร {len(remote_clean_names)} รายการบนเครื่องจักร เป็นสูตรใหม่ {len(new_recipes)} รายการ"
+            }, "INFO")
 
-        if not new_recipes:
-            msg = {"EN": "Local repository is already synchronized. No new recipes to pull.", "TH": "คลังข้อมูลซิงค์ตรงกันแล้ว ไม่มีสูตรใหม่ให้ดึง"}
-            log(msg, "SUCCESS")
-            return {"status": "ok", "message": msg["EN"], "pulled": [], "skipped": []}
+            if not new_recipes:
+                msg = {"EN": "Local repository is already synchronized. No new recipes to pull.", "TH": "คลังข้อมูลซิงค์ตรงกันแล้ว ไม่มีสูตรใหม่ให้ดึง"}
+                log(msg, "SUCCESS")
+                return {"status": "ok", "message": msg["EN"], "pulled": [], "skipped": []}
 
         # ── 4. Pull new files ─────────────────────────────────────────────────
         log({
-            "EN": f"Detected {len(new_recipes)} new recipes. Initiating automated pull sequence...",
-            "TH": f"ตรวจพบสูตรใหม่ {len(new_recipes)} รายการ เริ่มกระบวนการดาวน์โหลดสูตรอัตโนมัติ..."
+            "EN": f"Initiating pull sequence for {len(new_recipes)} recipe(s)...",
+            "TH": f"เริ่มกระบวนการดาวน์โหลดสูตร {len(new_recipes)} รายการ..."
         }, "INFO")
 
         success_count = 0

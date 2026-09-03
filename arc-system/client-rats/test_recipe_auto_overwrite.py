@@ -73,7 +73,7 @@ class RecipeAutoOverwriteTests(unittest.TestCase):
         self.assertEqual(body["status"], "identical")
         self.assertFalse(rats.RECIPE_ARCHIVE_DIR.exists())
 
-    def test_changed_older_duplicate_does_not_replace_host_copy(self):
+    def test_changed_duplicate_replaces_host_copy_regardless_of_source_time(self):
         destination = rats.RECIPE_DIR / "AUTO-OVERWRITE-TEST.PWB"
         old_data = pwb("AUTO-OVERWRITE-TEST", "host-newer")
         incoming_data = pwb("AUTO-OVERWRITE-TEST", "machine-older")
@@ -83,9 +83,9 @@ class RecipeAutoOverwriteTests(unittest.TestCase):
         body = json.loads(response.body)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(body["status"], "host_newer")
-        self.assertEqual(destination.read_bytes(), old_data)
-        self.assertFalse(rats.RECIPE_ARCHIVE_DIR.exists())
+        self.assertEqual(body["status"], "updated_existing")
+        self.assertEqual(destination.read_bytes(), incoming_data)
+        self.assertEqual(list(rats.RECIPE_ARCHIVE_DIR.glob("*.PWB"))[0].read_bytes(), old_data)
 
 
 if __name__ == "__main__":

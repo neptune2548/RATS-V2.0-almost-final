@@ -119,7 +119,7 @@ void FileWatcher::callback_loop() {
                 m_callback_jobs.pop_front();
             }
             const bool handled = m_callback &&
-                m_callback(job.path, job.ppid, job.content, job.source_modified_ms);
+                m_callback(job.path, job.ppid, job.content);
             if (!handled) {
                 CsLock lock(m_fingerprint_cs);
                 auto seen = m_last_fingerprints.find(job.fingerprint_key);
@@ -209,17 +209,6 @@ bool FileWatcher::read_snapshot(const std::string& filepath, std::vector<char>& 
     return !content.empty() && (input.eof() || input.good());
 }
 
-unsigned long long FileWatcher::modification_time_ms(const std::string& filepath) {
-    WIN32_FILE_ATTRIBUTE_DATA attributes{};
-    if (!GetFileAttributesExA(filepath.c_str(), GetFileExInfoStandard, &attributes)) return 0;
-    ULARGE_INTEGER timestamp{};
-    timestamp.LowPart = attributes.ftLastWriteTime.dwLowDateTime;
-    timestamp.HighPart = attributes.ftLastWriteTime.dwHighDateTime;
-    constexpr unsigned long long kUnixEpochOffsetMs = 11644473600000ULL;
-    const unsigned long long milliseconds = timestamp.QuadPart / 10000ULL;
-    return milliseconds > kUnixEpochOffsetMs ? milliseconds - kUnixEpochOffsetMs : 0;
-}
-
 void FileWatcher::watch_loop() {
     m_dir_handle = CreateFileA(m_watch_dir.c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr);
     if (m_dir_handle == INVALID_HANDLE_VALUE) {
@@ -282,13 +271,6 @@ void FileWatcher::watch_loop() {
                             ptr += info->NextEntryOffset;
                             continue;
                         }
-                        const unsigned long long source_modified_ms = modification_time_ms(full_path);
-                        if (source_modified_ms == 0) {
-                            LOG_WARN("FileWatcher: Could not determine last-write timestamp for " + fname + "; upload skipped.");
-                            if (info->NextEntryOffset == 0) break;
-                            ptr += info->NextEntryOffset;
-                            continue;
-                        }
                         std::string ppid_key = to_upper(real_ppid);
                         bool duplicate = false;
                         {
@@ -310,7 +292,6 @@ void FileWatcher::watch_loop() {
                         job.fingerprint_key = ppid_key;
                         job.fingerprint = fingerprint;
                         job.content = std::move(snapshot);
-                        job.source_modified_ms = source_modified_ms;
                         enqueue_callback(std::move(job));
                     } else {
                         LOG_WARN("FileWatcher: File '" + fname + "' appears empty or unstable — skipping.");
