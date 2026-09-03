@@ -13,7 +13,8 @@ public:
     // detected, so a later NPGM slot overwrite cannot alter an accepted job.
     using Callback = std::function<bool(const std::string& path,
                                         const std::string& ppid,
-                                        const std::vector<char>& content)>;
+                                        const std::vector<char>& content,
+                                        unsigned long long source_modified_ms)>;
 
     FileWatcher(std::string watch_dir, std::string file_ext, Callback callback);
     ~FileWatcher();
@@ -33,6 +34,7 @@ private:
         std::string fingerprint_key;
         std::string fingerprint;
         std::vector<char> content;
+        unsigned long long source_modified_ms{0};
     };
     std::deque<CallbackJob> m_callback_jobs;
 
@@ -55,6 +57,7 @@ private:
     std::string extract_ppid_from_file(const std::string& filepath, const std::string& fallback) const;
     static std::string content_fingerprint(const std::string& filepath);
     static bool read_snapshot(const std::string& filepath, std::vector<char>& content);
+    static unsigned long long modification_time_ms(const std::string& filepath);
 
     static bool wait_file_stable(const std::string& full_path, int settle_ms = 600);
 };

@@ -478,6 +478,37 @@ def _recipe_sha256(path: Path) -> str:
     return hashlib.sha256(_decompressed_pwb(path.read_bytes())).hexdigest()
 
 
+def _recipe_metadata_path(recipe: Path) -> Path:
+    """Return the durable provenance record for one recipe file."""
+    return recipe.parent / ".recipe-metadata" / f"{_strip_recipe_stem(recipe.name)}.json"
+
+
+def _recipe_version_timestamp_ms(recipe: Path, expected_sha256: str) -> int:
+    """Read the source timestamp for the current bytes, with a safe legacy fallback."""
+    try:
+        metadata = json.loads(_recipe_metadata_path(recipe).read_text(encoding="utf-8"))
+        if metadata.get("sha256") == expected_sha256:
+            timestamp = int(metadata.get("source_modified_ms", 0))
+            if timestamp > 0:
+                return timestamp
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    # Recipes saved by a pre-timestamp RATS version have no source provenance.
+    # Their file modification time is the best available host-side baseline.
+    return int(recipe.stat().st_mtime * 1000)
+
+
+def _write_recipe_metadata(recipe: Path, sha256: str, source_modified_ms: int, machine_id: str) -> None:
+    metadata_path = _recipe_metadata_path(recipe)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(metadata_path, json.dumps({
+        "sha256": sha256,
+        "source_modified_ms": source_modified_ms,
+        "machine_id": machine_id,
+        "recorded_at_ms": int(time.time() * 1000),
+    }, ensure_ascii=True, separators=(",", ":")).encode("utf-8"))
+
+
 def _find_recipe_by_ppid(ppid: str) -> Path | None:
     if not RECIPE_DIR.is_dir():
         return None
@@ -742,6 +773,7 @@ async def bot_file_channel(machine_id: str, host: str, port: int) -> None:
                         str(header.get("ppid", "")),
                         str(header.get("source_filename", "NPGM.PWB")),
                         None,
+                        str(header.get("source_modified_ms", "")),
                     )
                     result = json.loads(response.body.decode("utf-8"))
                     result["ok"] = True
@@ -1230,6 +1262,7 @@ async def receive_proxy_recipe(
     x_ppid: str | None = Header(default=None),
     x_source_filename: str | None = Header(default=None),
     x_content_sha256: str | None = Header(default=None),
+    x_source_modified_ms: str | None = Header(default=None),
 ) -> JSONResponse:
     """Ingest an operator-approved PWB from either supported transport."""
     if not x_proxy_token or not secrets.compare_digest(x_proxy_token, PROXY_UPLOAD_TOKEN):
@@ -1260,11 +1293,22 @@ async def receive_proxy_recipe(
         raise HTTPException(status_code=422, detail="Recipe content hash mismatch")
 
     source_filename = Path(x_source_filename or "NPGM.PWB").name
+    try:
+        source_modified_ms = int(x_source_modified_ms or "0")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid Recipe Bot source modification timestamp")
+    if source_modified_ms <= 0:
+        raise HTTPException(status_code=422, detail="Recipe Bot source modification timestamp is required")
+    # Reject obviously corrupt values while retaining enough range for minor
+    # equipment-clock drift.  The value is intentionally treated as UTC epoch.
+    if source_modified_ms > int(time.time() * 1000) + 366 * 24 * 60 * 60 * 1000:
+        raise HTTPException(status_code=422, detail="Recipe Bot source modification timestamp is implausibly far in the future")
     existing = _find_recipe_by_ppid(ppid)
 
     if existing is None:
         destination = RECIPE_DIR / f"{ppid}.PWB"
         _atomic_write(destination, data)
+        _write_recipe_metadata(destination, incoming_sha256, source_modified_ms, x_machine_id)
         add_event({
             "EN": f"New recipe '{ppid}' received from {x_machine_id} and saved to the host.",
             "TH": f"ได้รับสูตรใหม่ '{ppid}' จาก {x_machine_id} และบันทึกในโฮสต์แล้ว",
@@ -1291,14 +1335,29 @@ async def receive_proxy_recipe(
             "sha256": incoming_sha256,
         })
 
-    # Changed machine-side content now replaces the host copy immediately.
-    # Keep the previous host file in the archive so an accidental technician
-    # edit can still be recovered without blocking the Recipe Bot workflow.
+    host_modified_ms = _recipe_version_timestamp_ms(existing, existing_sha256)
+    if source_modified_ms <= host_modified_ms:
+        add_event({
+            "EN": f"Recipe '{ppid}' from {x_machine_id} differs, but its source timestamp is not newer than the host copy; host file retained.",
+            "TH": f"สูตร '{ppid}' จาก {x_machine_id} มีข้อมูลต่างกัน แต่เวลาแก้ไขไม่ใหม่กว่าไฟล์บนโฮสต์ จึงเก็บไฟล์บนโฮสต์ไว้",
+        }, "ALERT")
+        await broadcast_state()
+        return JSONResponse({
+            "status": "host_newer",
+            "ppid": ppid,
+            "filename": existing.name,
+            "source_modified_ms": source_modified_ms,
+            "host_modified_ms": host_modified_ms,
+        })
+
+    # Only a verified newer machine-side revision replaces the host copy.
+    # Keep the previous host file in the archive so it can be recovered.
     RECIPE_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     archive_name = f"{ppid}.{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.PWB"
     archive_path = RECIPE_ARCHIVE_DIR / archive_name
     shutil.copy2(existing, archive_path)
     _atomic_write(existing, data)
+    _write_recipe_metadata(existing, incoming_sha256, source_modified_ms, x_machine_id)
 
     # Remove obsolete approval requests for this PPID from older server builds;
     # otherwise an old dashboard approval could overwrite the new host copy.
@@ -1310,8 +1369,8 @@ async def receive_proxy_recipe(
         Path(stale["metadata_path"]).unlink(missing_ok=True)
 
     add_event({
-        "EN": f"Recipe '{ppid}' from {x_machine_id} changed and automatically replaced the host copy; previous version archived.",
-        "TH": f"สูตร '{ppid}' จาก {x_machine_id} มีการเปลี่ยนแปลง ระบบแทนที่ไฟล์ในโฮสต์อัตโนมัติและเก็บเวอร์ชันเดิมไว้ในคลังแล้ว",
+        "EN": f"Recipe '{ppid}' from {x_machine_id} is newer and replaced the host copy; previous version archived.",
+        "TH": f"สูตร '{ppid}' จาก {x_machine_id} ใหม่กว่า ระบบแทนที่ไฟล์ในโฮสต์และเก็บเวอร์ชันเดิมไว้ในคลังแล้ว",
     }, "SUCCESS")
     await broadcast_state()
     return JSONResponse({
@@ -1319,6 +1378,7 @@ async def receive_proxy_recipe(
         "ppid": ppid,
         "filename": existing.name,
         "sha256": incoming_sha256,
+        "source_modified_ms": source_modified_ms,
         "archive": archive_path.name,
     })
 

@@ -12,7 +12,8 @@
 namespace {
 
 const char kChannelMagic[8] = {'A','R','C','F','B','O','T','1'};
-const char kJobMagic[8] = {'A','R','C','J','O','B','1','\0'};
+const char kJobMagicV1[8] = {'A','R','C','J','O','B','1','\0'};
+const char kJobMagic[8] = {'A','R','C','J','O','B','2','\0'};
 
 bool parse_ipv4(const std::string& ip, in_addr& output) {
     sockaddr_in address{};
@@ -38,6 +39,18 @@ bool read_u32(std::ifstream& input, std::uint32_t& value) {
     input.read(reinterpret_cast<char*>(&encoded), sizeof(encoded));
     if (!input) return false;
     value = static_cast<std::uint32_t>(ntohl(encoded));
+    return true;
+}
+
+bool write_u64(std::ofstream& output, std::uint64_t value) {
+    return write_u32(output, static_cast<std::uint32_t>(value >> 32)) &&
+           write_u32(output, static_cast<std::uint32_t>(value & 0xffffffffULL));
+}
+
+bool read_u64(std::ifstream& input, std::uint64_t& value) {
+    std::uint32_t high = 0, low = 0;
+    if (!read_u32(input, high) || !read_u32(input, low)) return false;
+    value = (static_cast<std::uint64_t>(high) << 32) | low;
     return true;
 }
 
@@ -271,9 +284,10 @@ void FileChannel::close_auth_socket_locked() {
 
 FileChannelResult FileChannel::queue_recipe(const std::vector<char>& body,
                                             const std::string& source_filename,
-                                            const std::string& ppid) {
+                                            const std::string& ppid,
+                                            unsigned long long source_modified_ms) {
     OutboxJob job;
-    FileChannelResult result = write_job(body, source_filename, ppid, job);
+    FileChannelResult result = write_job(body, source_filename, ppid, source_modified_ms, job);
     if (!result.ok) return result;
     {
         CsLock lock(m_queue_cs);
@@ -285,13 +299,15 @@ FileChannelResult FileChannel::queue_recipe(const std::vector<char>& body,
 
 FileChannelResult FileChannel::check_recipe(const std::vector<char>& body,
                                             const std::string& source_filename,
-                                            const std::string& ppid) {
-    return exchange_bytes("check", body, source_filename, ppid, true);
+                                            const std::string& ppid,
+                                            unsigned long long source_modified_ms) {
+    return exchange_bytes("check", body, source_filename, ppid, source_modified_ms, true);
 }
 
 FileChannelResult FileChannel::write_job(const std::vector<char>& body,
                                          const std::string& source_filename,
                                          const std::string& ppid,
+                                         unsigned long long source_modified_ms,
                                          OutboxJob& job) {
     FileChannelResult result;
     if (body.empty()) {
@@ -302,6 +318,10 @@ FileChannelResult FileChannel::write_job(const std::vector<char>& body,
         source_filename.empty() || source_filename.size() > 4096 ||
         ppid.empty() || ppid.size() > 4096) {
         result.message = "Recipe cannot be placed in the durable outbox";
+        return result;
+    }
+    if (source_modified_ms == 0) {
+        result.message = "Recipe source modification timestamp is unavailable";
         return result;
     }
 
@@ -321,7 +341,8 @@ FileChannelResult FileChannel::write_job(const std::vector<char>& body,
     const bool header_ok =
         write_u32(output, static_cast<std::uint32_t>(source_filename.size())) &&
         write_u32(output, static_cast<std::uint32_t>(ppid.size())) &&
-        write_u32(output, static_cast<std::uint32_t>(body.size()));
+        write_u32(output, static_cast<std::uint32_t>(body.size())) &&
+        write_u64(output, static_cast<std::uint64_t>(source_modified_ms));
     if (header_ok) {
         output.write(source_filename.data(), static_cast<std::streamsize>(source_filename.size()));
         output.write(ppid.data(), static_cast<std::streamsize>(ppid.size()));
@@ -340,6 +361,7 @@ FileChannelResult FileChannel::write_job(const std::vector<char>& body,
     job.path = final_path;
     job.source_filename = source_filename;
     job.ppid = ppid;
+    job.source_modified_ms = source_modified_ms;
     result.ok = true;
     result.server_status = "queued";
     result.message = "Recipe safely queued for host transfer";
@@ -353,7 +375,9 @@ bool FileChannel::read_job(const std::string& path, OutboxJob& job,
     if (!input.is_open()) return false;
     char magic[8]{};
     input.read(magic, sizeof(magic));
-    if (!input || std::memcmp(magic, kJobMagic, sizeof(kJobMagic)) != 0) return false;
+    if (!input || (std::memcmp(magic, kJobMagic, sizeof(kJobMagic)) != 0 &&
+                   std::memcmp(magic, kJobMagicV1, sizeof(kJobMagicV1)) != 0)) return false;
+    const bool legacy_job = std::memcmp(magic, kJobMagicV1, sizeof(kJobMagicV1)) == 0;
 
     std::uint32_t source_length = 0;
     std::uint32_t ppid_length = 0;
@@ -362,6 +386,8 @@ bool FileChannel::read_job(const std::string& path, OutboxJob& job,
         !read_u32(input, body_length) || source_length == 0 || source_length > 4096 ||
         ppid_length == 0 || ppid_length > 4096 || body_length == 0 ||
         body_length > m_config.max_file_bytes) return false;
+    std::uint64_t source_modified_ms = 0;
+    if (!legacy_job && !read_u64(input, source_modified_ms)) return false;
 
     std::vector<char> source(source_length);
     std::vector<char> ppid(ppid_length);
@@ -374,6 +400,7 @@ bool FileChannel::read_job(const std::string& path, OutboxJob& job,
     job.path = path;
     job.source_filename.assign(source.begin(), source.end());
     job.ppid.assign(ppid.begin(), ppid.end());
+    job.source_modified_ms = static_cast<unsigned long long>(source_modified_ms);
     return true;
 }
 
@@ -437,7 +464,7 @@ void FileChannel::sender_loop() {
                 result.server_status = "error";
             } else {
                 result = exchange_bytes("recipe", body, loaded.source_filename,
-                                        loaded.ppid, false);
+                                        loaded.ppid, loaded.source_modified_ms, false);
                 job = loaded;
             }
 
@@ -468,6 +495,7 @@ FileChannelResult FileChannel::exchange_bytes(const std::string& frame_type,
                                               const std::vector<char>& body,
                                               const std::string& source_filename,
                                               const std::string& ppid,
+                                              unsigned long long source_modified_ms,
                                               bool wait_for_connection) {
     FileChannelResult result;
     if (body.empty() || body.size() > m_config.max_file_bytes) {
@@ -495,7 +523,8 @@ FileChannelResult FileChannel::exchange_bytes(const std::string& frame_type,
              << "\",\"machine_id\":\"" << json_escape(m_config.machine_id)
              << "\",\"ppid\":\"" << json_escape(ppid)
              << "\",\"source_filename\":\"" << json_escape(source_filename)
-             << "\",\"size\":" << body.size() << "}";
+             << "\",\"source_modified_ms\":" << source_modified_ms
+             << ",\"size\":" << body.size() << "}";
     const std::string header = metadata.str();
     const unsigned long network_header_length = htonl(static_cast<unsigned long>(header.size()));
 

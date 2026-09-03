@@ -39,10 +39,12 @@ public:
     // sender thread retries transport failures after the host reconnects.
     FileChannelResult queue_recipe(const std::vector<char>& body,
                                    const std::string& source_filename,
-                                   const std::string& ppid);
+                                   const std::string& ppid,
+                                   unsigned long long source_modified_ms);
     FileChannelResult check_recipe(const std::vector<char>& body,
                                    const std::string& source_filename,
-                                   const std::string& ppid);
+                                   const std::string& ppid,
+                                   unsigned long long source_modified_ms);
 
 private:
     Config m_config;
@@ -64,6 +66,7 @@ private:
         std::string path;
         std::string source_filename;
         std::string ppid;
+        unsigned long long source_modified_ms{0};
     };
     std::deque<OutboxJob> m_jobs;
     CompletionCallback m_completion_callback;
@@ -82,6 +85,7 @@ private:
     FileChannelResult write_job(const std::vector<char>& body,
                                 const std::string& source_filename,
                                 const std::string& ppid,
+                                unsigned long long source_modified_ms,
                                 OutboxJob& job);
     static bool move_to_failed(const std::string& path);
 
@@ -93,5 +97,6 @@ private:
                                      const std::vector<char>& body,
                                      const std::string& source_filename,
                                      const std::string& ppid,
+                                     unsigned long long source_modified_ms,
                                      bool wait_for_connection);
 };

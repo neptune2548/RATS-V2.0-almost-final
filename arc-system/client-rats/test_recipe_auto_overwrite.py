@@ -33,7 +33,7 @@ class RecipeAutoOverwriteTests(unittest.TestCase):
         rats.pending_recipe_updates.clear()
         self.temp.cleanup()
 
-    def upload(self, data: bytes):
+    def upload(self, data: bytes, source_modified_ms: int = 2000):
         return asyncio.run(
             rats.receive_proxy_recipe(
                 rats._MemoryRecipeRequest(data),
@@ -42,6 +42,7 @@ class RecipeAutoOverwriteTests(unittest.TestCase):
                 "AUTO-OVERWRITE-TEST",
                 "NPGM0.PWB",
                 None,
+                str(source_modified_ms),
             )
         )
 
@@ -51,7 +52,7 @@ class RecipeAutoOverwriteTests(unittest.TestCase):
         new_data = pwb("AUTO-OVERWRITE-TEST", "new")
         destination.write_bytes(old_data)
 
-        response = self.upload(new_data)
+        response = self.upload(new_data, source_modified_ms=int(destination.stat().st_mtime * 1000) + 1000)
         body = json.loads(response.body)
 
         self.assertEqual(response.status_code, 200)
@@ -70,6 +71,20 @@ class RecipeAutoOverwriteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(body["status"], "identical")
+        self.assertFalse(rats.RECIPE_ARCHIVE_DIR.exists())
+
+    def test_changed_older_duplicate_does_not_replace_host_copy(self):
+        destination = rats.RECIPE_DIR / "AUTO-OVERWRITE-TEST.PWB"
+        old_data = pwb("AUTO-OVERWRITE-TEST", "host-newer")
+        incoming_data = pwb("AUTO-OVERWRITE-TEST", "machine-older")
+        destination.write_bytes(old_data)
+
+        response = self.upload(incoming_data, source_modified_ms=1)
+        body = json.loads(response.body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["status"], "host_newer")
+        self.assertEqual(destination.read_bytes(), old_data)
         self.assertFalse(rats.RECIPE_ARCHIVE_DIR.exists())
 
 

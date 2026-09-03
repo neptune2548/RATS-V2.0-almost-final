@@ -29,9 +29,11 @@ Port `5002` is not used. The bot does not make HTTP requests to host port
 4. For a new or changed local recipe, the equipment operator sees a popup.
 5. On acceptance, the original PWB bytes are sent through the authenticated
    port-5003 session.
-6. A new PPID is saved immediately. Changed content for an existing PPID
-   automatically archives the old host copy and replaces it without waiting
-   for dashboard approval.
+6. The Bot includes the machine file's UTC last-write timestamp with every
+   transfer. A new PPID is saved immediately. For an existing PPID, RATS
+   compares timestamps: only a newer machine file archives and replaces the
+   host copy; an equal or older machine file is retained on the machine side
+   and cannot overwrite the Host version.
 7. After the host confirms receipt, a completion popup remains visible until
    the operator presses OK. Pressing OK closes only the popup; Recipe Bot keeps
    running.
@@ -42,6 +44,12 @@ to `recipe_outbox` beside the executable. Transport failures keep the job for
 automatic FIFO retry after reconnect or reboot; it is deleted only after the
 host confirms receipt. Deploy the bot in a directory writable by its normal
 Windows user.
+
+The timestamp travels with the durable outbox job, so an offline machine does
+not lose its original modification time before the RATS host reconnects. Jobs
+created by older Bot builds do not have a timestamp and are rejected safely by
+the timestamp-aware Host; deploy the current Bot to equipment PCs before
+relying on automatic version replacement.
 
 The directory watcher is event-driven. TCP keepalive detects connection loss;
 the host reconnects silently while offline and broadcasts only real state
