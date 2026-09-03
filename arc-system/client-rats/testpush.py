@@ -299,7 +299,10 @@ def run_push(machine_id: str, recipe_name: str, log_callback=None) -> dict:
         "TH": f"สั่งการ worker ให้ส่งข้อมูลสูตร '{recipe_name}'..."
     }, "INFO")
     
-    push_res = _send_command_and_wait(machine_id, {"action": "push_recipe", "recipe": recipe_name}, log, timeout=60)
+    # Push uses two fresh HSMS sessions (backup then transfer).  A healthy
+    # machine can legitimately spend more than 60 seconds reconnecting and
+    # waiting for S7F2/S7F4, so do not report a false worker timeout.
+    push_res = _send_command_and_wait(machine_id, {"action": "push_recipe", "recipe": recipe_name}, log, timeout=180)
     
     if push_res.get("status") == "ok":
         msg = {"EN": f"Push operation for {recipe_name} was successful.", "TH": f"ส่งสูตร {recipe_name} สำเร็จ"}
