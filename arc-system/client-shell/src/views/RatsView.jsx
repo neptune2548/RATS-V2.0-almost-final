@@ -5,14 +5,54 @@ import { useLanguage } from '../context/LanguageContext';
 import { 
   Cpu, Send, Download, Lock, ShieldCheck, CheckCircle2, 
   RefreshCw, Layers, Database, AlertCircle, Scan, Wifi, Trash2, Radio, Server, X,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Map, Maximize2, Minimize2
 } from 'lucide-react';
 
-const RATS_API_BASE = 'http://127.0.0.1:8080';
-const RATS_WS_URL = 'ws://127.0.0.1:8080/ws';
+const RATS_HOST = window.location.hostname || '127.0.0.1';
+const RATS_HTTP_SCHEME = window.location.protocol === 'https:' ? 'https' : 'http';
+const RATS_WS_SCHEME = window.location.protocol === 'https:' ? 'wss' : 'ws';
+const RATS_API_BASE = import.meta.env.VITE_RATS_API_BASE || `${RATS_HTTP_SCHEME}://${RATS_HOST}:8080`;
+const RATS_WS_URL = import.meta.env.VITE_RATS_WS_URL || `${RATS_WS_SCHEME}://${RATS_HOST}:8080/ws`;
+
+const normalizeLinkState = (value) => {
+  const state = String(value || 'UNKNOWN').toUpperCase();
+  // Connection retries are intentionally hidden from operators.  A machine
+  // stays OFFLINE in the UI until a connection has actually been established.
+  if (state === 'CONNECTING' || state === 'CONN. LOST') return 'OFFLINE';
+  return ['ONLINE', 'OFFLINE'].includes(state) ? state : 'UNKNOWN';
+};
+
+const linkStateClasses = {
+  ONLINE: 'bg-emerald-100 text-emerald-800 border-emerald-400 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700',
+  OFFLINE: 'bg-red-100 text-red-800 border-red-400 dark:bg-red-950 dark:text-red-300 dark:border-red-700',
+  CONNECTING: 'bg-amber-100 text-amber-800 border-amber-400 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700',
+  UNKNOWN: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600',
+};
+
+const linkDotClasses = {
+  ONLINE: 'bg-emerald-500',
+  OFFLINE: 'bg-red-500',
+  CONNECTING: 'bg-amber-400 animate-pulse',
+  UNKNOWN: 'bg-slate-400',
+};
+
+const SECTION_ORDER = ['WB_ADVANCED', 'IC_WIRE_BOND', 'UNASSIGNED'];
+
+const machineSectionId = (machine) => machine?.production_section || 'UNASSIGNED';
+
+const isReconnectNoise = (log) => {
+  const message = typeof log?.message === 'object'
+    ? Object.values(log.message).join(' ')
+    : String(log?.message || '');
+  const normalized = message.toLowerCase();
+  return [
+    'connecting to ', 'retrying in ', 'reconnecting...',
+    'กำลังเชื่อมต่อไปยัง', 'กำลังเชื่อมต่อใหม่', 'แล้วลองใหม่',
+  ].some(fragment => normalized.includes(fragment));
+};
 
 export const RatsView = ({ onRequireElevatedAuth }) => {
-  const { currentRole, hasPushPermission } = useAuth();
+  const { currentRole, hasPushPermission, hasDeletePermission, hasDeveloperPermission, authHeaders, logoutToGuest, setAuthError } = useAuth();
   const { theme } = useTheme();
   const { t, language } = useLanguage();
 
@@ -26,35 +66,22 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
   const [customProgramInput, setCustomProgramInput] = useState('');
   const [showRecipeDropdown, setShowRecipeDropdown] = useState(false);
   const [fuzzyModalConfig, setFuzzyModalConfig] = useState({ isOpen: false, original: '', suggestion: '' });
-  const [memsStateMap, setMemsStateMap] = useState({});
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState({ isOpen: false, recipe: '' });
+  const [pendingRecipeUpdates, setPendingRecipeUpdates] = useState([]);
+  const [pendingDecisionBusy, setPendingDecisionBusy] = useState(false);
+  const [deploymentFiles, setDeploymentFiles] = useState([]);
+  const [deploymentBusy, setDeploymentBusy] = useState(false);
+  const [isMachineExpanded, setIsMachineExpanded] = useState(false);
 
   const wsRef = useRef(null);
   const selectedMachineIdRef = useRef(selectedMachineId);
+  const lastSelectedMachineBySectionRef = useRef({});
+  const deploymentInputRef = useRef(null);
+  const machineDetailsRef = useRef(null);
 
   useEffect(() => {
     selectedMachineIdRef.current = selectedMachineId;
   }, [selectedMachineId]);
-
-  // Poll MEMS for live machine states (RUNNING / IDLE / DOWN) every 3 seconds
-  useEffect(() => {
-    const fetchMemsStates = async () => {
-      try {
-        const res = await fetch('http://127.0.0.1:8000/api/mems/machines', { signal: AbortSignal.timeout(2000) });
-        if (res.ok) {
-          const items = await res.json();
-          const map = {};
-          items.forEach(m => {
-            if (m.id)   map[m.id]   = m.state;
-            if (m.name) map[m.name] = m.state;
-          });
-          setMemsStateMap(map);
-        }
-      } catch (_) {}
-    };
-    fetchMemsStates();
-    const interval = setInterval(fetchMemsStates, 3000);
-    return () => clearInterval(interval);
-  }, []);
 
   const logoSrc = theme === 'light' 
     ? '/assets/Stars - Original Logo.png' 
@@ -95,6 +122,9 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
             }
             if (data.events) {
               setEventLogs(data.events);
+            }
+            if (data.pending_recipe_updates) {
+              setPendingRecipeUpdates(data.pending_recipe_updates);
             }
           } catch (e) {
             console.error('Failed to parse WS data:', e);
@@ -137,6 +167,9 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
         if (data.events) {
           setEventLogs(data.events);
         }
+        if (data.pending_recipe_updates) {
+          setPendingRecipeUpdates(data.pending_recipe_updates);
+        }
       })
       .catch(() => {
         setIsBackendOnline(false);
@@ -157,12 +190,115 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
   }, [selectedMachineId]);
 
   const activeMachine = machines.find(m => m.id === selectedMachineId) || machines[0] || {
-    id: 'WB#81', name: 'Wire Bonder #81', ip: '169.254.13.81', port: 5000, status: 'IDLE', current_program: 'None', link_status: 'CONNECTING'
+    id: 'WB#81', name: 'Wire Bonder #81', ip: '169.254.13.81', port: 5000, status: 'IDLE', current_program: 'None', link_status: 'OFFLINE', bot_status: 'OFFLINE', machine_link_status: 'OFFLINE', production_section: 'WB_ADVANCED'
+  };
+
+  const groupedMachines = SECTION_ORDER
+    .map(sectionId => ({
+      sectionId,
+      machines: machines.filter(machine => machineSectionId(machine) === sectionId),
+    }))
+    .filter(group => group.machines.length > 0);
+
+  const activeSectionId = machineSectionId(activeMachine);
+  const activeMachineGroup = groupedMachines.find(group => group.sectionId === activeSectionId) || groupedMachines[0];
+  const sectionMachines = activeMachineGroup?.machines || [];
+  const activeSectionLabel = activeSectionId === 'WB_ADVANCED'
+    ? t('wb_advanced_section')
+    : activeSectionId === 'IC_WIRE_BOND'
+      ? t('ic_wire_bond_section')
+      : t('unassigned_section');
+
+  useEffect(() => {
+    const selected = machines.find(machine => machine.id === selectedMachineId);
+    if (selected) {
+      lastSelectedMachineBySectionRef.current[machineSectionId(selected)] = selected.id;
+    }
+  }, [machines, selectedMachineId]);
+
+  const selectProductionSection = (sectionId) => {
+    const group = groupedMachines.find(item => item.sectionId === sectionId);
+    if (!group?.machines.length) return;
+    const rememberedMachineId = lastSelectedMachineBySectionRef.current[sectionId];
+    const nextMachine = group.machines.find(machine => machine.id === rememberedMachineId) || group.machines[0];
+    setSelectedMachineId(nextMachine.id);
+    setIsMachineExpanded(false);
+  };
+
+  const selectAndExpandMachine = (machineId) => {
+    if (currentRole === ROLES.GUEST) {
+      setActionStatus({ type: 'AUTH', status: 'ERROR', msg: t('access_insufficient') });
+      return;
+    }
+    setSelectedMachineId(machineId);
+    setIsMachineExpanded(true);
+    window.requestAnimationFrame(() => {
+      machineDetailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const visibleEventLogs = eventLogs.filter(log => {
+    if (isReconnectNoise(log)) return false;
+    if (log.production_section) return log.production_section === activeSectionId;
+    const serialized = typeof log.message === 'object'
+      ? Object.values(log.message).join(' ')
+      : String(log.message || '');
+    const match = serialized.match(/WB#(\d+)/i) || serialized.match(/Wire Bonder\s*#(\d+)/i);
+    if (!match) return false;
+    const logMachine = machines.find(machine => machine.id === `WB#${match[1]}`);
+    return machineSectionId(logMachine) === activeSectionId;
+  });
+
+  const pendingRecipeUpdate = pendingRecipeUpdates[0] || null;
+  const isGuestUser = currentRole === ROLES.GUEST;
+
+  const notifyRestrictedAccess = () => {
+    setActionStatus({ type: 'AUTH', status: 'ERROR', msg: t('access_insufficient') });
+  };
+
+  const linkStateLabel = (state) => {
+    if (state === 'ONLINE') return t('online');
+    if (state === 'OFFLINE') return t('offline');
+    return t('unchecked');
+  };
+
+  const resolvePendingRecipe = async (decision) => {
+    if (!pendingRecipeUpdate || pendingDecisionBusy) return;
+    if (!hasDeletePermission()) {
+      onRequireElevatedAuth(ROLES.TECHNICIAN);
+      return;
+    }
+
+    setPendingDecisionBusy(true);
+    try {
+      const res = await fetch(
+        `${RATS_API_BASE}/api/recipes/pending/${encodeURIComponent(pendingRecipeUpdate.request_id)}/${decision}`,
+        { method: 'POST', headers: authHeaders() }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.error || `Request failed (${res.status})`);
+      setPendingRecipeUpdates(prev => prev.filter(item => item.request_id !== pendingRecipeUpdate.request_id));
+      setActionStatus({
+        type: 'RECIPE UPDATE',
+        status: decision === 'approve' ? 'SUCCESS' : 'IDLE',
+        msg: decision === 'approve'
+          ? `Accepted host recipe update '${pendingRecipeUpdate.ppid}' from ${pendingRecipeUpdate.machine_id}.`
+          : `Rejected host recipe update '${pendingRecipeUpdate.ppid}' from ${pendingRecipeUpdate.machine_id}.`
+      });
+    } catch (err) {
+      setActionStatus({ type: 'RECIPE UPDATE', status: 'ERROR', msg: err.message });
+    } finally {
+      setPendingDecisionBusy(false);
+    }
   };
 
   // Barcode Lookup
   const handleBarcodeScan = async (e) => {
     e.preventDefault();
+    if (currentRole === ROLES.GUEST) {
+      notifyRestrictedAccess();
+      return;
+    }
     if (!serialInput.trim()) return;
     const term = serialInput.trim();
 
@@ -172,7 +308,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
       const data = await res.json();
 
       if (res.ok && data.machine) {
-        setSelectedMachineId(data.machine.id);
+        selectAndExpandMachine(data.machine.id);
         setActionStatus({ type: 'SCAN', status: 'SUCCESS', msg: `Found barcode ${term} -> Assigned to ${data.machine.name}` });
         setSerialInput('');
       } else {
@@ -192,14 +328,20 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
 
     try {
       const res = await fetch(`${RATS_API_BASE}/api/machines/${encodeURIComponent(activeMachine.id)}/pull`, {
-        method: 'POST'
+        method: 'POST',
+        headers: authHeaders()
       });
+      if (res.status === 401) {
+        logoutToGuest();
+        setAuthError('Your session has expired. Please log in again to continue.');
+        return;
+      }
       const data = await res.json();
       if (data.result && data.result.status === 'ok') {
         setActionStatus({ type: 'PULL', status: 'SUCCESS', msg: `Recipe Pull SUCCESS for ${activeMachine.name}` });
         setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, link_status: 'ONLINE' } : m));
       } else {
-        const err = data.result?.message || data.error || 'Pull failed';
+        const err = data.result?.message || data.error || data.detail || 'Pull failed';
         setActionStatus({ type: 'PULL', status: 'ERROR', msg: `Recipe Pull FAILED: ${err}` });
         setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, link_status: 'OFFLINE' } : m));
       }
@@ -208,10 +350,66 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
     }
   };
 
+  const handleDeployFiles = async () => {
+    if (!hasDeveloperPermission()) {
+      onRequireElevatedAuth(ROLES.DEVELOPER);
+      return;
+    }
+    const allowedNames = new Set(['secs_proxy_bot.exe', 'config.ini']);
+    const files = deploymentFiles.filter(file => allowedNames.has(file.name.toLowerCase()));
+    if (files.length === 0) {
+      setActionStatus({ type: 'DEPLOY', status: 'ERROR', msg: t('deploy_select_required') });
+      return;
+    }
+
+    setDeploymentBusy(true);
+    try {
+      const results = [];
+      for (const file of files) {
+        setActionStatus({
+          type: 'DEPLOY',
+          status: 'RUNNING',
+          msg: `${t('deploy_sending')} ${file.name} → ${activeMachine.id}:5004...`
+        });
+        const res = await fetch(
+          `${RATS_API_BASE}/api/machines/${encodeURIComponent(activeMachine.id)}/deploy-file`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/octet-stream',
+              'X-Deploy-Filename': file.name,
+              ...authHeaders()
+            },
+            body: file
+          }
+        );
+        if (res.status === 401) {
+          logoutToGuest();
+          setAuthError(t('session_expired'));
+          return;
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.error || `${file.name}: request failed (${res.status})`);
+        results.push(`${file.name}: ${data.message}`);
+      }
+      setActionStatus({
+        type: 'DEPLOY',
+        status: 'SUCCESS',
+        msg: `${t('deploy_complete')} ${activeMachine.id}. ${results.join(' | ')}`
+      });
+      setDeploymentFiles([]);
+      if (deploymentInputRef.current) deploymentInputRef.current.value = '';
+    } catch (err) {
+      setActionStatus({ type: 'DEPLOY', status: 'ERROR', msg: `${t('deploy_failed')}: ${err.message}` });
+    } finally {
+      setDeploymentBusy(false);
+    }
+  };
+
   // Push Recipe
   const handlePushRecipe = async (programOverride = null) => {
     if (!hasPushPermission()) {
-      onRequireElevatedAuth(ROLES.TECHNICIAN);
+      onRequireElevatedAuth(ROLES.OPERATOR);
       return;
     }
 
@@ -229,10 +427,16 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
       try {
         const checkRes = await fetch(`${RATS_API_BASE}/api/recipes/suggest`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ recipe_name: programToPush })
         });
         
+        if (checkRes.status === 401) {
+          logoutToGuest();
+          setAuthError('Your session has expired. Please log in again to continue.');
+          return;
+        }
+
         if (checkRes.ok) {
           const checkData = await checkRes.json();
           if (!checkData.exact_match) {
@@ -259,15 +463,20 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
     try {
       const res = await fetch(`${RATS_API_BASE}/api/machines/${encodeURIComponent(activeMachine.id)}/push`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ program_name: programToPush })
       });
+      if (res.status === 401) {
+        logoutToGuest();
+        setAuthError('Your session has expired. Please log in again to continue.');
+        return;
+      }
       const data = await res.json();
       if (data.result && data.result.status === 'ok') {
         setActionStatus({ type: 'PUSH', status: 'SUCCESS', msg: `Recipe Push SUCCESS: Loaded '${programToPush}' on ${activeMachine.name}` });
         setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, current_program: programToPush, link_status: 'ONLINE' } : m));
       } else {
-        const err = data.result?.message || data.error || 'Push failed';
+        const err = data.result?.message || data.error || data.detail || 'Push failed';
         setActionStatus({ type: 'PUSH', status: 'ERROR', msg: `Recipe Push FAILED: ${err}` });
         setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, link_status: 'OFFLINE' } : m));
       }
@@ -277,8 +486,8 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
   };
 
   // Delete Recipe
-  const handleDeleteRecipe = async () => {
-    if (!hasPushPermission()) {
+  const handleDeleteRecipe = () => {
+    if (!hasDeletePermission()) {
       onRequireElevatedAuth(ROLES.TECHNICIAN);
       return;
     }
@@ -289,26 +498,30 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to delete '${programToDelete}' from ${activeMachine.name}? This action cannot be undone.`)) {
-      return;
-    }
+    setDeleteConfirmModal({ isOpen: true, recipe: programToDelete });
+  };
 
+  const executeDelete = async (programToDelete) => {
     setActionStatus({ type: 'DELETE', status: 'RUNNING', msg: `Executing Recipe Deletion '${programToDelete}' from ${activeMachine.name}...` });
 
     try {
       const res = await fetch(`${RATS_API_BASE}/api/machines/${encodeURIComponent(activeMachine.id)}/delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ program_name: programToDelete })
       });
+      if (res.status === 401) {
+        logoutToGuest();
+        setAuthError('Your session has expired. Please log in again to continue.');
+        return;
+      }
       const data = await res.json();
       if (data.result && data.result.status === 'ok') {
         setActionStatus({ type: 'DELETE', status: 'SUCCESS', msg: `Recipe Deletion SUCCESS: Removed '${programToDelete}' from ${activeMachine.name}` });
         setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, current_program: (m.current_program === programToDelete ? 'None' : m.current_program), link_status: 'ONLINE' } : m));
-        // Clear input after successful delete
         setCustomProgramInput('');
       } else {
-        const err = data.result?.message || data.error || 'Delete failed';
+        const err = data.result?.message || data.error || data.detail || 'Delete failed';
         setActionStatus({ type: 'DELETE', status: 'ERROR', msg: `Recipe Deletion FAILED: ${err}` });
         setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, link_status: 'OFFLINE' } : m));
       }
@@ -320,7 +533,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
   // Purge logs endpoint call
   const handleClearLogs = async () => {
     try {
-      await fetch(`${RATS_API_BASE}/api/logs/clear`, { method: 'POST' });
+      await fetch(`${RATS_API_BASE}/api/logs/clear`, { method: 'POST', headers: authHeaders() });
       setEventLogs([]);
     } catch (e) {
       setEventLogs([]);
@@ -386,62 +599,140 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
         </div>
       )}
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left Column: Machine Fleet List */}
-        <div className="industrial-card lg:col-span-1">
+      {isGuestUser && (
+        <div className="flex items-center gap-2.5 rounded-lg border-2 border-sky-300 bg-sky-50 p-3.5 text-xs text-sky-900 shadow-sm dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+          <Lock className="h-5 w-5 flex-shrink-0 text-sky-600 dark:text-sky-400" />
+          <span><strong>{t('guest_read_only_title')}:</strong> {t('guest_read_only_message')}</span>
+        </div>
+      )}
+
+      {actionStatus?.type === 'AUTH' && (
+        <div role="alert" className="flex items-center gap-2.5 rounded-lg border-2 border-amber-400 bg-amber-50 p-3.5 text-xs font-bold text-amber-900 shadow-sm dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          {actionStatus.msg}
+        </div>
+      )}
+
+      {/* Machine floor map and expandable details */}
+      <div className="space-y-6">
+        <div className="industrial-card overflow-hidden">
           <div className="industrial-card-header">
-            <span>{t('bonder_fleet')}</span>
-            <span className="text-xs text-slate-500 font-mono">{machines.length}{t('machines_count')}</span>
+            <span className="flex items-center gap-2">
+              <Map className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+              {t('factory_map')}
+            </span>
+            <div className="text-right">
+              <span className="block text-xs text-slate-500 font-mono">{machines.length}{t('machines_count')}</span>
+              <span className="block text-[9px] font-mono uppercase tracking-wide text-slate-400">{t('schematic_map')}</span>
+            </div>
           </div>
 
-          <div className="p-3 space-y-2 max-h-[520px] overflow-y-auto">
+          {groupedMachines.length > 0 && (
+            <div
+              role="tablist"
+              aria-label={t('production_section')}
+              className="industrial-scrollbar flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 pt-2 dark:border-slate-700 dark:bg-slate-900/70"
+            >
+              {groupedMachines.map(group => {
+                const isActive = group.sectionId === activeSectionId;
+                const onlineCount = group.machines.filter(machine => normalizeLinkState(machine.machine_link_status) === 'ONLINE').length;
+                const sectionLabel = group.sectionId === 'WB_ADVANCED'
+                  ? t('wb_advanced_section')
+                  : group.sectionId === 'IC_WIRE_BOND'
+                    ? t('ic_wire_bond_section')
+                    : t('unassigned_section');
+                return (
+                  <button
+                    key={group.sectionId}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => selectProductionSection(group.sectionId)}
+                    className={`min-w-max rounded-t-md border-x border-t px-3 py-2 text-left transition-colors ${
+                      isActive
+                        ? 'border-sky-500 bg-white text-sky-700 shadow-[0_2px_0_white] dark:bg-slate-800 dark:text-sky-300 dark:shadow-[0_2px_0_rgb(30,41,59)]'
+                        : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <span className="block text-[10px] font-extrabold">{sectionLabel}</span>
+                    <span className="mt-0.5 block text-[9px] font-mono opacity-75">
+                      {onlineCount}/{group.machines.length} {t('online')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="border-b border-slate-200 bg-white px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+            {t('factory_map_hint')}
+          </div>
+
+          <div className="industrial-scrollbar max-h-[58vh] min-h-[310px] overflow-auto bg-slate-100/80 p-4 dark:bg-slate-950/50" role="tabpanel">
             {machines.length === 0 ? (
               <div className="p-4 text-center text-xs font-mono text-slate-400">Loading machines from database...</div>
             ) : (
-              machines.map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => setSelectedMachineId(m.id)}
-                  className={`w-full text-left p-3 rounded border font-mono transition-all ${
-                    selectedMachineId === m.id
-                      ? 'bg-sky-50 dark:bg-sky-950/60 border-sky-500 shadow-xs'
-                      : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-900 dark:text-slate-100">{m.name}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                      m.link_status === 'ONLINE' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800' :
-                      m.link_status === 'CONNECTING' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 dark:border-amber-800' :
-                      m.link_status === 'CONN. LOST' ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border-red-300 dark:border-red-800 animate-pulse' :
-                      m.link_status === 'OFFLINE' ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border-red-300 dark:border-red-800' :
-                      'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-300 dark:border-slate-700'
-                    }`}>
-                      {m.link_status === 'ONLINE' ? t('online') : 
-                       m.link_status === 'OFFLINE' ? t('offline') : 
-                       m.link_status === 'CONNECTING' ? t('connecting', 'CONNECTING') : 
-                       m.link_status === 'CONN. LOST' ? t('conn_lost', 'CONN. LOST') : m.link_status}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    <span className="font-semibold">{m.id}</span>
-                    <span className="font-mono text-slate-400 truncate max-w-[110px]">{m.current_program || t('none')}</span>
-                  </div>
-                </button>
-              ))
+              <div className="grid min-w-[920px] grid-cols-8 auto-rows-[132px] gap-4 rounded-lg border border-slate-300 bg-[linear-gradient(to_right,rgba(148,163,184,0.14)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.14)_1px,transparent_1px)] bg-[size:32px_32px] p-5 dark:border-slate-700 dark:bg-slate-900/70">
+                {sectionMachines.map((m, index) => {
+                    const machineState = normalizeLinkState(m.machine_link_status);
+                    const botState = normalizeLinkState(m.bot_status);
+                    const mapPosition = m.map_position || { row: Math.floor(index / 8) + 1, column: (index % 8) + 1 };
+                    const frameClasses = machineState === 'ONLINE'
+                      ? 'border-emerald-500 bg-emerald-50/95 shadow-[0_0_0_3px_rgba(16,185,129,0.12)] dark:border-emerald-500 dark:bg-emerald-950/70'
+                      : machineState === 'OFFLINE'
+                        ? 'border-red-500 bg-red-50/95 shadow-[0_0_0_3px_rgba(239,68,68,0.12)] dark:border-red-500 dark:bg-red-950/60'
+                        : 'border-slate-400 bg-white/95 dark:border-slate-600 dark:bg-slate-800/90';
+                    return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => selectAndExpandMachine(m.id)}
+                    aria-label={`${isGuestUser ? t('access_insufficient') : t('expand_machine')} ${m.name}`}
+                    style={{ gridRowStart: mapPosition.row, gridColumnStart: mapPosition.column }}
+                    className={`group relative h-full min-w-0 rounded-lg border-[3px] p-3 text-left font-mono transition-all focus:outline-none focus:ring-4 focus:ring-sky-300 dark:focus:ring-sky-800 ${isGuestUser ? 'cursor-not-allowed' : 'hover:-translate-y-1 hover:shadow-lg'} ${frameClasses} ${
+                      selectedMachineId === m.id
+                        ? 'ring-2 ring-sky-500 ring-offset-2 dark:ring-offset-slate-950'
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="block truncate text-sm font-extrabold text-slate-900 dark:text-white">{m.id}</span>
+                        <span className="mt-0.5 block truncate text-[9px] text-slate-500 dark:text-slate-400">{m.name}</span>
+                      </div>
+                      {isGuestUser
+                        ? <Lock className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                        : <Maximize2 className="h-4 w-4 flex-shrink-0 text-slate-400 transition-colors group-hover:text-sky-600" />}
+                    </div>
+                    <div className={`mt-3 flex items-center gap-2 text-sm font-extrabold ${machineState === 'ONLINE' ? 'text-emerald-700 dark:text-emerald-300' : machineState === 'OFFLINE' ? 'text-red-700 dark:text-red-300' : 'text-slate-600 dark:text-slate-300'}`}>
+                      <span className={`h-3 w-3 rounded-sm ${linkDotClasses[machineState]}`} />
+                      {linkStateLabel(machineState)}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[9px] text-slate-500 dark:text-slate-400">
+                      <span className="truncate">{m.current_program || t('none')}</span>
+                      <span className={`h-2 w-2 flex-shrink-0 rounded-full ${linkDotClasses[botState]}`} title={`${t('bot_status')}: ${linkStateLabel(botState)}`} />
+                    </div>
+                  </button>
+                    );
+                  })}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Right Column: Selected Machine Action Panel */}
-        <div className="industrial-card lg:col-span-2 space-y-0">
+        {/* Selected machine details remain collapsed until map/QR selection. */}
+        {isMachineExpanded && (
+        <div ref={machineDetailsRef} className="industrial-card scroll-mt-4 space-y-0">
           <div className="industrial-card-header">
             <span>{t('selected_machine')}{activeMachine.name} [{activeMachine.id}]</span>
-            <span className="text-xs text-sky-600 dark:text-sky-400 font-mono">
-              {t('protocol_hsms')}
-            </span>
+            <button
+              type="button"
+              onClick={() => setIsMachineExpanded(false)}
+              className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <Minimize2 className="h-3.5 w-3.5" />
+              {t('collapse_details')}
+            </button>
           </div>
 
           <div className="p-6 space-y-6">
@@ -450,31 +741,13 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
               <div>
                 <div className="text-slate-500">{t('machine_status')}</div>
                 {(() => {
-                  const memsState = memsStateMap[activeMachine.id] || memsStateMap[activeMachine.name];
-                  const state = memsState || activeMachine.status || 'UNKNOWN';
-                  const stateColors = {
-                    RUNNING: 'bg-emerald-100 text-emerald-800 border-emerald-400 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700',
-                    IDLE:    'bg-amber-100 text-amber-800 border-amber-400 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700',
-                    DOWN:    'bg-red-100 text-red-800 border-red-400 dark:bg-red-950 dark:text-red-300 dark:border-red-700',
-                    OFFLINE: 'bg-slate-100 text-slate-600 border-slate-400 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600',
-                  };
-                  const dotColors = {
-                    RUNNING: 'bg-emerald-500 animate-pulse',
-                    IDLE:    'bg-amber-400 animate-pulse',
-                    DOWN:    'bg-red-500 animate-pulse',
-                    OFFLINE: 'bg-slate-400',
-                  };
-                  const colorClass = stateColors[state] || stateColors.OFFLINE;
-                  const dotClass  = dotColors[state]  || dotColors.OFFLINE;
+                  const state = normalizeLinkState(activeMachine.machine_link_status);
                   return (
                     <div className="mt-1 flex items-center gap-1.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-bold uppercase ${colorClass}`}>
-                        <span className={`w-2 h-2 rounded-full ${dotClass}`} />
-                        {state}
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-bold uppercase ${linkStateClasses[state]}`}>
+                        <span className={`w-2 h-2 rounded-full ${linkDotClasses[state]}`} />
+                        {linkStateLabel(state)}
                       </span>
-                      {memsState && (
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">MEMS</span>
-                      )}
                     </div>
                   );
                 })()}
@@ -486,17 +759,12 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
                 </div>
               </div>
               <div>
-                <div className="text-slate-500">{t('link_status')}</div>
+                <div className="text-slate-500">{t('bot_status')}</div>
                 <div className={`text-base font-bold mt-1 ${
-                  activeMachine.link_status === 'ONLINE' ? 'text-emerald-600' :
-                  activeMachine.link_status === 'CONNECTING' ? 'text-amber-500' :
-                  activeMachine.link_status === 'CONN. LOST' ? 'text-red-500 animate-pulse' :
-                  activeMachine.link_status === 'OFFLINE' ? 'text-red-500' : 'text-slate-500'
+                  normalizeLinkState(activeMachine.bot_status) === 'ONLINE' ? 'text-emerald-600' :
+                  normalizeLinkState(activeMachine.bot_status) === 'OFFLINE' ? 'text-red-500' : 'text-slate-500'
                 }`}>
-                  {activeMachine.link_status === 'ONLINE' ? t('online') : 
-                   activeMachine.link_status === 'OFFLINE' ? t('offline') : 
-                   activeMachine.link_status === 'CONNECTING' ? t('connecting', 'CONNECTING') : 
-                   activeMachine.link_status === 'CONN. LOST' ? t('conn_lost', 'CONN. LOST') : activeMachine.link_status}
+                  {linkStateLabel(normalizeLinkState(activeMachine.bot_status))}
                 </div>
               </div>
             </div>
@@ -518,14 +786,25 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
             {/* SECS/GEM Workflow Buttons */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
-              <button
-                onClick={handlePullRecipe}
-                disabled={actionStatus?.status === 'RUNNING'}
-                className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded font-mono-industrial text-[11px] font-bold text-slate-800 dark:text-slate-200 flex flex-col items-center gap-1 transition-colors"
-              >
-                <Download className="w-4 h-4 text-amber-500" />
-                <span>{t('pull_recipe')}</span>
-              </button>
+              {isGuestUser ? (
+                <button
+                  type="button"
+                  onClick={() => notifyRestrictedAccess(ROLES.OPERATOR)}
+                  className="p-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded font-mono-industrial text-[11px] font-bold text-slate-400 flex flex-col items-center gap-1 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <Lock className="w-4 h-4 text-amber-500" />
+                  <span>{t('pull_recipe')}</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handlePullRecipe}
+                  disabled={actionStatus?.status === 'RUNNING'}
+                  className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded font-mono-industrial text-[11px] font-bold text-slate-800 dark:text-slate-200 flex flex-col items-center gap-1 transition-colors"
+                >
+                  <Download className="w-4 h-4 text-amber-500" />
+                  <span>{t('pull_recipe')}</span>
+                </button>
+              )}
 
               {hasPushPermission() ? (
                 <button
@@ -538,7 +817,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
                 </button>
               ) : (
                 <button
-                  onClick={() => onRequireElevatedAuth(ROLES.TECHNICIAN)}
+                  onClick={() => notifyRestrictedAccess(ROLES.OPERATOR)}
                   className="p-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded font-mono-industrial text-[11px] font-bold text-slate-400 flex flex-col items-center gap-1 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
                   <Lock className="w-4 h-4 text-amber-500" />
@@ -547,12 +826,71 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
               )}
             </div>
 
+            {/* Authenticated TCP deployment receiver */}
+            {hasDeveloperPermission() && (
+              <div className="p-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-800 rounded font-mono text-xs space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-sky-800 dark:text-sky-300 flex items-center gap-2">
+                      <Server className="w-4 h-4" />
+                      {t('deploy_bot_title')}
+                    </div>
+                    <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                      {t('deploy_bot_description')}
+                    </div>
+                  </div>
+                  <span className="px-2 py-1 rounded border border-sky-300 dark:border-sky-700 text-[10px] font-bold text-sky-700 dark:text-sky-300 flex-shrink-0">
+                    TCP :5004
+                  </span>
+                </div>
+
+                <input
+                  ref={deploymentInputRef}
+                  type="file"
+                  multiple
+                  accept=".exe,.ini"
+                  disabled={deploymentBusy}
+                  onChange={(event) => {
+                    const selected = Array.from(event.target.files || []);
+                    const allowed = selected.filter(file => ['secs_proxy_bot.exe', 'config.ini'].includes(file.name.toLowerCase()));
+                    const rejected = selected.filter(file => !['secs_proxy_bot.exe', 'config.ini'].includes(file.name.toLowerCase()));
+                    setDeploymentFiles(allowed);
+                    if (rejected.length > 0) {
+                      setActionStatus({ type: 'DEPLOY', status: 'ERROR', msg: t('deploy_only_allowed_files') });
+                    }
+                  }}
+                  className="block w-full text-[11px] text-slate-600 dark:text-slate-300 file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-sky-600 file:text-white file:font-bold hover:file:bg-sky-700 disabled:opacity-50"
+                />
+
+                {deploymentFiles.length > 0 && (
+                  <div className="space-y-1 text-[10px] text-slate-600 dark:text-slate-300">
+                    {deploymentFiles.map(file => (
+                      <div key={`${file.name}-${file.size}`} className="flex justify-between gap-3">
+                        <span>{file.name}</span>
+                        <span>{file.size.toLocaleString()} bytes</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleDeployFiles}
+                  disabled={deploymentBusy || deploymentFiles.length === 0}
+                  className="w-full px-3 py-2 rounded bg-sky-600 hover:bg-sky-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-bold flex items-center justify-center gap-2 transition-colors"
+                >
+                  {deploymentBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {deploymentBusy ? t('deploy_sending') : t('deploy_send_button')}
+                </button>
+              </div>
+            )}
+
             {/* Push Recipe Selection options */}
             {hasPushPermission() && (
               <div className="p-3 bg-slate-100 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded font-mono text-xs space-y-2">
                 <div className="font-semibold text-slate-700 dark:text-slate-300">{t('target_push')}</div>
-                <div className="relative flex flex-col sm:flex-row items-center gap-2">
-                  <div className="relative w-full">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
                     <div className="flex items-center w-full">
                       <input
                         type="text"
@@ -582,15 +920,6 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
                         {showRecipeDropdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleDeleteRecipe}
-                      disabled={actionStatus?.status === 'RUNNING'}
-                      title="Delete recipe from machine"
-                      className="ml-2 p-1.5 bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-800 rounded text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors focus:outline-none disabled:opacity-50 flex-shrink-0"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                     {showRecipeDropdown && availableRecipes.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white/90 dark:bg-slate-800/95 backdrop-blur-md border border-slate-300 dark:border-slate-700 rounded shadow-xl max-h-48 overflow-y-auto">
                         {availableRecipes
@@ -614,6 +943,15 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
                       </div>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleDeleteRecipe}
+                    disabled={actionStatus?.status === 'RUNNING'}
+                    title="Delete recipe from machine"
+                    className="p-1.5 bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-800 rounded text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors focus:outline-none disabled:opacity-50 flex-shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             )}
@@ -623,7 +961,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-mono-industrial text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                   <Radio className="w-4 h-4 text-emerald-500 animate-pulse" />
-                  {t('event_log_title')}
+                  {t('section_event_log')}: {activeSectionLabel}
                 </h3>
                 <button
                   onClick={handleClearLogs}
@@ -634,10 +972,10 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
               </div>
 
               <div className="p-4 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 rounded border border-slate-200 dark:border-slate-800 font-mono text-xs h-48 overflow-y-auto space-y-1.5">
-                {eventLogs.length === 0 ? (
+                {visibleEventLogs.length === 0 ? (
                   <div className="text-slate-400 dark:text-slate-600 text-center pt-8">{t('no_logs')}</div>
                 ) : (
-                  eventLogs.map((log, idx) => (
+                  visibleEventLogs.map((log, idx) => (
                     <div key={idx} className="flex items-start gap-2 text-[11px] leading-relaxed">
                       <span className="text-slate-400 dark:text-slate-500 font-mono flex-shrink-0">[{log.timestamp}]</span>
                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0 border ${
@@ -657,7 +995,120 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
 
           </div>
         </div>
+        )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {pendingRecipeUpdate && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border-2 border-amber-400 dark:border-amber-600 rounded-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div className="bg-amber-500 text-slate-950 px-5 py-3.5 flex items-center gap-2.5 font-mono-industrial">
+              <AlertCircle className="w-5 h-5" />
+              <span className="font-bold text-sm tracking-wide uppercase">{t('recipe_update_title')}</span>
+            </div>
+
+            <div className="p-5 space-y-4 font-mono-industrial">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                {t('recipe_update_description')}
+              </p>
+
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4 text-xs">
+                <span className="text-slate-500">PPID</span>
+                <span className="font-bold text-slate-900 dark:text-white break-all">{pendingRecipeUpdate.ppid}</span>
+                <span className="text-slate-500">{t('machine')}</span>
+                <span className="font-semibold text-sky-600 dark:text-sky-400">{pendingRecipeUpdate.machine_id}</span>
+                <span className="text-slate-500">{t('machine_file')}</span>
+                <span className="text-slate-700 dark:text-slate-300">{pendingRecipeUpdate.source_filename}</span>
+                <span className="text-slate-500">{t('host_file')}</span>
+                <span className="text-slate-700 dark:text-slate-300">{pendingRecipeUpdate.existing_filename}</span>
+                <span className="text-slate-500">{t('incoming_size')}</span>
+                <span>{Number(pendingRecipeUpdate.incoming_size || 0).toLocaleString()} {t('bytes')}</span>
+                <span className="text-slate-500">{t('current_size')}</span>
+                <span>{Number(pendingRecipeUpdate.existing_size || 0).toLocaleString()} {t('bytes')}</span>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t('recipe_update_explanation')}
+              </p>
+
+              {!hasDeletePermission() && (
+                <div className="text-xs rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 text-amber-800 dark:text-amber-300 px-3 py-2">
+                  {t('update_auth_required')}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800 text-xs">
+                <button
+                  disabled={pendingDecisionBusy}
+                  onClick={() => resolvePendingRecipe('reject')}
+                  className="px-4 py-2 rounded bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold tracking-wide"
+                >
+                  {t('reject_update')}
+                </button>
+                <button
+                  disabled={pendingDecisionBusy}
+                  onClick={() => resolvePendingRecipe('approve')}
+                  className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold tracking-wide"
+                >
+                  {pendingDecisionBusy ? t('processing') : t('accept_update')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-lg shadow-xl overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div className="bg-red-600 text-white px-5 py-3.5 flex items-center justify-between font-mono-industrial">
+              <div className="flex items-center gap-2.5">
+                <Trash2 className="w-5 h-5" />
+                <span className="font-semibold text-sm tracking-wide uppercase">{t('confirm_deletion')}</span>
+              </div>
+              <button
+                onClick={() => setDeleteConfirmModal({ isOpen: false, recipe: '' })}
+                className="text-red-200 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 bg-red-100 dark:bg-red-950/60 rounded-full border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 flex-shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">{t('delete_recipe_question')}</h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                    {t('delete_recipe_text_before')} <strong className="text-red-600 dark:text-red-400">'{deleteConfirmModal.recipe}'</strong> {language === 'TH' ? `ออกจาก ${activeMachine?.name} อย่างถาวร? การดำเนินการนี้ไม่สามารถย้อนกลับได้` : `from ${activeMachine?.name}? This action cannot be undone.`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800 font-mono-industrial text-xs">
+                <button
+                  onClick={() => setDeleteConfirmModal({ isOpen: false, recipe: '' })}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-semibold transition-colors"
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  onClick={() => {
+                    executeDelete(deleteConfirmModal.recipe);
+                    setDeleteConfirmModal({ isOpen: false, recipe: '' });
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-bold transition-colors shadow-sm uppercase tracking-wider"
+                >
+                  {t('confirm_delete')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fuzzy Suggestion Modal */}
       {fuzzyModalConfig.isOpen && (
@@ -667,7 +1118,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
             <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between font-mono-industrial">
               <div className="flex items-center gap-2.5">
                 <AlertCircle className="w-5 h-5 text-amber-400" />
-                <span className="font-semibold text-base tracking-wide">RECIPE NOT FOUND</span>
+                <span className="font-semibold text-base tracking-wide">{t('recipe_not_found')}</span>
               </div>
               <button onClick={() => setFuzzyModalConfig({ isOpen: false, original: '', suggestion: '' })} className="text-slate-400 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
@@ -676,12 +1127,11 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
 
             <div className="p-6 font-mono-industrial">
               <p className="text-slate-600 dark:text-slate-400 mb-4 text-sm leading-relaxed">
-                The exact recipe <strong className="text-slate-900 dark:text-white">'{fuzzyModalConfig.original}'</strong> was not found locally. 
-                However, a closely matching recipe exists on the server.
+                {t('recipe_not_found_before')} <strong className="text-slate-900 dark:text-white">'{fuzzyModalConfig.original}'</strong> {t('recipe_not_found_after')}
               </p>
               
               <div className="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md mb-6">
-                <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Did you mean:</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">{t('did_you_mean')}</div>
                 <div className="font-bold text-sky-600 dark:text-sky-400 text-base">{fuzzyModalConfig.suggestion}</div>
               </div>
 
@@ -693,7 +1143,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
                   }}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-semibold transition-colors text-sm"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button 
                   onClick={() => {
@@ -705,7 +1155,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold shadow transition-colors flex items-center gap-2 text-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  Accept & Push
+                  {t('accept_and_push')}
                 </button>
               </div>
             </div>

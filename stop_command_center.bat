@@ -11,9 +11,6 @@ echo.
 echo  Killing RATS SECS/GEM Engine...
 powershell -Command "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -match 'main\.py' -and $_.CommandLine -match 'python' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
 
-echo  Killing MEMS Telemetry Engine...
-powershell -Command "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -match 'server\.py' -and $_.CommandLine -match 'python' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
-
 echo  Killing Section Manager and ALL hidden ghost workers...
 powershell -Command "Get-WmiObject Win32_Process | Where-Object { ($_.CommandLine -match 'manager\.py' -or $_.CommandLine -match 'worker\.py') -and $_.CommandLine -match 'python' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
 

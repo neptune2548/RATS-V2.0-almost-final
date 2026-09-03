@@ -1,6 +1,6 @@
-// ═══════════════════════════════════════════════════════════════════════════
+﻿// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // i18n
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const i18n = {
   EN: {
     sys_id: "RATS-PTT-001",
@@ -41,7 +41,7 @@ const i18n = {
     machine_panel: "MACHINE CONTROL",
     awaiting_title: "AWAITING SCAN",
     awaiting_sub: "Point barcode scanner at machine label or enter serial manually",
-    no_program: "— NO PROGRAM LOADED —",
+    no_program: "â€” NO PROGRAM LOADED â€”",
     awaiting_events: "AWAITING SYSTEM EVENTS",
     loading_text: "LOADING...",
     no_recipes: "NO .PWB RECIPES FOUND",
@@ -55,50 +55,50 @@ const i18n = {
     sys_id: "RATS-PTT-001",
     version: "v1.0",
     page_title: "RECIPE AUTOMATED TRANSFER SYSTEM",
-    page_subtitle: "ระบบสื่อสาร SECS/GEM",
-    scan_label: "บาร์โค้ด / ซีเรียลเครื่องจักร",
-    scan_placeholder: "สแกนหรือพิมพ์หมายเลขซีเรียล...",
-    scan_hint: "กด ENTER หรือสแกนบาร์โค้ด",
-    scan_confirm: "ระบุเครื่อง",
-    scan_another: "สแกนเครื่องถัดไป...",
-    clear_btn: "ยกเลิก",
-    log_title: "บันทึกเหตุการณ์ระบบ",
-    live_tag: "สด",
-    clear_log_btn: "ล้างบันทึก",
-    debug_title: "การวินิจฉัยระบบ",
-    debug_transport: "การเชื่อมต่อ",
-    debug_recipe_server: "เซิร์ฟเวอร์สูตร",
+    page_subtitle: "à¸£à¸°à¸šà¸šà¸ªà¸·à¹ˆà¸­à¸ªà¸²à¸£ SECS/GEM",
+    scan_label: "à¸šà¸²à¸£à¹Œà¹‚à¸„à¹‰à¸” / à¸‹à¸µà¹€à¸£à¸µà¸¢à¸¥à¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡à¸ˆà¸±à¸à¸£",
+    scan_placeholder: "à¸ªà¹à¸à¸™à¸«à¸£à¸·à¸­à¸žà¸´à¸¡à¸žà¹Œà¸«à¸¡à¸²à¸¢à¹€à¸¥à¸‚à¸‹à¸µà¹€à¸£à¸µà¸¢à¸¥...",
+    scan_hint: "à¸à¸” ENTER à¸«à¸£à¸·à¸­à¸ªà¹à¸à¸™à¸šà¸²à¸£à¹Œà¹‚à¸„à¹‰à¸”",
+    scan_confirm: "à¸£à¸°à¸šà¸¸à¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡",
+    scan_another: "à¸ªà¹à¸à¸™à¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡à¸–à¸±à¸”à¹„à¸›...",
+    clear_btn: "à¸¢à¸à¹€à¸¥à¸´à¸",
+    log_title: "à¸šà¸±à¸™à¸—à¸¶à¸à¹€à¸«à¸•à¸¸à¸à¸²à¸£à¸“à¹Œà¸£à¸°à¸šà¸š",
+    live_tag: "à¸ªà¸”",
+    clear_log_btn: "à¸¥à¹‰à¸²à¸‡à¸šà¸±à¸™à¸—à¸¶à¸",
+    debug_title: "à¸à¸²à¸£à¸§à¸´à¸™à¸´à¸ˆà¸‰à¸±à¸¢à¸£à¸°à¸šà¸š",
+    debug_transport: "à¸à¸²à¸£à¹€à¸Šà¸·à¹ˆà¸­à¸¡à¸•à¹ˆà¸­",
+    debug_recipe_server: "à¹€à¸‹à¸´à¸£à¹Œà¸Ÿà¹€à¸§à¸­à¸£à¹Œà¸ªà¸¹à¸•à¸£",
     debug_gem_host: "GEM HOST",
-    card_current_program: "โปรแกรมที่โหลดอยู่",
-    card_new_program: "โปรแกรมเป้าหมาย",
-    card_new_program_placeholder: "สแกนหรือพิมพ์ชื่อโปรแกรม",
-    card_link: "สถานะลิงก์",
-    card_port: "พอร์ต",
-    card_mode: "โหมด",
-    card_push: "ส่งสูตร",
-    card_pull: "ดึงสูตร / ซิงค์",
-    card_check: "ตรวจสอบลิงก์",
-    card_pulling: "กำลังซิงค์...",
-    card_pushing: "กำลังส่ง...",
-    card_checking: "กำลังเช็ค...",
-    card_status_idle: "พร้อม",
-    card_status_syncing: "กำลังซิงค์",
-    card_status_pushing: "กำลังส่ง",
-    card_status_checking: "กำลังเช็ค",
-    not_found_title: "ไม่พบเครื่องจักร",
-    not_found_msg: "ไม่มีเครื่องจักรที่ลงทะเบียนด้วยซีเรียล",
-    machine_panel: "ควบคุมเครื่องจักร",
-    awaiting_title: "รอการสแกน",
-    awaiting_sub: "ชี้สแกนเนอร์ที่ฉลากเครื่องจักร หรือพิมพ์หมายเลขซีเรียล",
-    no_program: "— ไม่มีโปรแกรมที่โหลด —",
-    awaiting_events: "รอเหตุการณ์ระบบ",
-    loading_text: "กำลังโหลด...",
-    no_recipes: "ไม่พบไฟล์สูตร .PWB",
-    load_failed: "โหลดไม่สำเร็จ",
-    events_label: "เหตุการณ์",
-    link_online: "เชื่อมต่อแล้ว",
-    link_offline: "ออฟไลน์",
-    browse_recipes: "เลือกสูตร",
+    card_current_program: "à¹‚à¸›à¸£à¹à¸à¸£à¸¡à¸—à¸µà¹ˆà¹‚à¸«à¸¥à¸”à¸­à¸¢à¸¹à¹ˆ",
+    card_new_program: "à¹‚à¸›à¸£à¹à¸à¸£à¸¡à¹€à¸›à¹‰à¸²à¸«à¸¡à¸²à¸¢",
+    card_new_program_placeholder: "à¸ªà¹à¸à¸™à¸«à¸£à¸·à¸­à¸žà¸´à¸¡à¸žà¹Œà¸Šà¸·à¹ˆà¸­à¹‚à¸›à¸£à¹à¸à¸£à¸¡",
+    card_link: "à¸ªà¸–à¸²à¸™à¸°à¸¥à¸´à¸‡à¸à¹Œ",
+    card_port: "à¸žà¸­à¸£à¹Œà¸•",
+    card_mode: "à¹‚à¸«à¸¡à¸”",
+    card_push: "à¸ªà¹ˆà¸‡à¸ªà¸¹à¸•à¸£",
+    card_pull: "à¸”à¸¶à¸‡à¸ªà¸¹à¸•à¸£ / à¸‹à¸´à¸‡à¸„à¹Œ",
+    card_check: "à¸•à¸£à¸§à¸ˆà¸ªà¸­à¸šà¸¥à¸´à¸‡à¸à¹Œ",
+    card_pulling: "à¸à¸³à¸¥à¸±à¸‡à¸‹à¸´à¸‡à¸„à¹Œ...",
+    card_pushing: "à¸à¸³à¸¥à¸±à¸‡à¸ªà¹ˆà¸‡...",
+    card_checking: "à¸à¸³à¸¥à¸±à¸‡à¹€à¸Šà¹‡à¸„...",
+    card_status_idle: "à¸žà¸£à¹‰à¸­à¸¡",
+    card_status_syncing: "à¸à¸³à¸¥à¸±à¸‡à¸‹à¸´à¸‡à¸„à¹Œ",
+    card_status_pushing: "à¸à¸³à¸¥à¸±à¸‡à¸ªà¹ˆà¸‡",
+    card_status_checking: "à¸à¸³à¸¥à¸±à¸‡à¹€à¸Šà¹‡à¸„",
+    not_found_title: "à¹„à¸¡à¹ˆà¸žà¸šà¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡à¸ˆà¸±à¸à¸£",
+    not_found_msg: "à¹„à¸¡à¹ˆà¸¡à¸µà¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡à¸ˆà¸±à¸à¸£à¸—à¸µà¹ˆà¸¥à¸‡à¸—à¸°à¹€à¸šà¸µà¸¢à¸™à¸”à¹‰à¸§à¸¢à¸‹à¸µà¹€à¸£à¸µà¸¢à¸¥",
+    machine_panel: "à¸„à¸§à¸šà¸„à¸¸à¸¡à¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡à¸ˆà¸±à¸à¸£",
+    awaiting_title: "à¸£à¸­à¸à¸²à¸£à¸ªà¹à¸à¸™",
+    awaiting_sub: "à¸Šà¸µà¹‰à¸ªà¹à¸à¸™à¹€à¸™à¸­à¸£à¹Œà¸—à¸µà¹ˆà¸‰à¸¥à¸²à¸à¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡à¸ˆà¸±à¸à¸£ à¸«à¸£à¸·à¸­à¸žà¸´à¸¡à¸žà¹Œà¸«à¸¡à¸²à¸¢à¹€à¸¥à¸‚à¸‹à¸µà¹€à¸£à¸µà¸¢à¸¥",
+    no_program: "â€” à¹„à¸¡à¹ˆà¸¡à¸µà¹‚à¸›à¸£à¹à¸à¸£à¸¡à¸—à¸µà¹ˆà¹‚à¸«à¸¥à¸” â€”",
+    awaiting_events: "à¸£à¸­à¹€à¸«à¸•à¸¸à¸à¸²à¸£à¸“à¹Œà¸£à¸°à¸šà¸š",
+    loading_text: "à¸à¸³à¸¥à¸±à¸‡à¹‚à¸«à¸¥à¸”...",
+    no_recipes: "à¹„à¸¡à¹ˆà¸žà¸šà¹„à¸Ÿà¸¥à¹Œà¸ªà¸¹à¸•à¸£ .PWB",
+    load_failed: "à¹‚à¸«à¸¥à¸”à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ",
+    events_label: "à¹€à¸«à¸•à¸¸à¸à¸²à¸£à¸“à¹Œ",
+    link_online: "à¹€à¸Šà¸·à¹ˆà¸­à¸¡à¸•à¹ˆà¸­à¹à¸¥à¹‰à¸§",
+    link_offline: "à¸­à¸­à¸Ÿà¹„à¸¥à¸™à¹Œ",
+    browse_recipes: "à¹€à¸¥à¸·à¸­à¸à¸ªà¸¹à¸•à¸£",
   },
 };
 
@@ -128,9 +128,9 @@ document.getElementById("langToggle").addEventListener("click", () => {
   renderEvents();
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Theme Toggle (Light / Dark)
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function getTheme() {
   return document.documentElement.getAttribute("data-theme") || "light";
 }
@@ -157,12 +157,13 @@ document.getElementById("themeToggle").addEventListener("click", () => {
   setTheme(next);
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // State
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let activeMachine = null;
 let newProgramValue = "";
 let events = [];
+let pendingRecipes = [];
 let socket;
 let wsConnected = false;
 let wsLabel = "CONNECTING";
@@ -180,9 +181,9 @@ const eventLogEl = document.getElementById("eventLog");
 const connDot = document.getElementById("connDot");
 const connText = document.getElementById("connText");
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Clock
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function updateClock() {
   const time = new Date().toLocaleTimeString("en-US", {
     hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -194,9 +195,9 @@ function updateClock() {
 updateClock();
 setInterval(updateClock, 1000);
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Helpers
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -213,9 +214,9 @@ function cleanMsg(msg) {
   return String(msg).replace(/[\u{1F000}-\u{1FFFF}]|[\u2600-\u27FF]/gu, "").trim();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Connection Status
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function setConn(status, label) {
   connStatus = status;
   wsLabel = label;
@@ -239,9 +240,9 @@ function setConn(status, label) {
   connText.textContent = `WS:${label}`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Scan Area Rendering
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function renderScanArea() {
   if (activeMachine) {
     scanArea.classList.remove("full-width");
@@ -306,9 +307,9 @@ function renderScanArea() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Left Panel Rendering
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function renderLeftPanel() {
   if (activeMachine) {
@@ -431,7 +432,7 @@ function renderMachinePanel() {
   fullRenderMachinePanel();
 }
 
-// ── Surgical in-place update: only touches elements that change ──
+// â”€â”€ Surgical in-place update: only touches elements that change â”€â”€
 function updateMachinePanelInPlace() {
   const machine = activeMachine;
   const isBusy = machine.status !== "IDLE";
@@ -481,15 +482,15 @@ function updateMachinePanelInPlace() {
     } else if (machine.link_status === "CHECKING") {
       linkCell.innerHTML = '<span class="link-checking"><span class="spinner spin"></span><span>...</span></span>';
     } else {
-      linkCell.innerHTML = '<span style="color:var(--muted-foreground);font-size:14px;font-family:var(--font-mono)">—</span>';
+      linkCell.innerHTML = '<span style="color:var(--muted-foreground);font-size:14px;font-family:var(--font-mono)">â€”</span>';
     }
   }
 
   // Update port value
   const portCell = leftPanel.querySelector(".telemetry-grid .data-cell:nth-child(2) .value");
-  if (portCell) portCell.textContent = String(machine.port || '—');
+  if (portCell) portCell.textContent = String(machine.port || 'â€”');
 
-  // Update target input disabled state (do NOT change value — user may be typing)
+  // Update target input disabled state (do NOT change value â€” user may be typing)
   const targetInput = document.getElementById("targetProgramInput");
   if (targetInput) {
     targetInput.disabled = isBusy;
@@ -540,10 +541,10 @@ function updateMachinePanelInPlace() {
   const nameEl = leftPanel.querySelector(".machine-faceplate .name");
   if (nameEl) nameEl.textContent = machine.name;
   const addrEl = leftPanel.querySelector(".machine-faceplate .addr");
-  if (addrEl) addrEl.textContent = `${machine.ip || '—'}:${String(machine.port || '—')}`;
+  if (addrEl) addrEl.textContent = `${machine.ip || 'â€”'}:${String(machine.port || 'â€”')}`;
 }
 
-// ── Full innerHTML render (first time only or when machine changes) ──
+// â”€â”€ Full innerHTML render (first time only or when machine changes) â”€â”€
 function fullRenderMachinePanel() {
   const machine = activeMachine;
   const isBusy = machine.status !== "IDLE";
@@ -560,7 +561,7 @@ function fullRenderMachinePanel() {
   const st = statusMap[machine.status] || statusMap.IDLE;
 
   // Link badge
-  let linkHtml = '<span style="color:var(--muted-foreground);font-size:14px;font-family:var(--font-mono)">—</span>';
+  let linkHtml = '<span style="color:var(--muted-foreground);font-size:14px;font-family:var(--font-mono)">â€”</span>';
   if (machine.link_status === "ONLINE") {
     linkHtml = `<span class="link-online">${escapeHtml(t('link_online'))}</span>`;
   } else if (machine.link_status === "OFFLINE") {
@@ -591,7 +592,7 @@ function fullRenderMachinePanel() {
           <div>
             <p class="label-xs" style="margin-bottom:4px">${escapeHtml(t('machine_panel'))} // ${escapeHtml(machine.id)}</p>
             <h2 class="name">${escapeHtml(machine.name)}</h2>
-            <p class="addr">${escapeHtml(machine.ip || '—')}:${escapeHtml(String(machine.port || '—'))}</p>
+            <p class="addr">${escapeHtml(machine.ip || 'â€”')}:${escapeHtml(String(machine.port || 'â€”'))}</p>
           </div>
           <span class="status-pill ${st.cls}">
             <span class="dot ${st.dotPulse}"></span>
@@ -646,7 +647,7 @@ function fullRenderMachinePanel() {
           </div>
           <div class="data-cell">
             <span class="label-xs">${escapeHtml(t('card_port'))}</span>
-            <div class="value" style="color:var(--foreground)">${escapeHtml(String(machine.port || '—'))}</div>
+            <div class="value" style="color:var(--foreground)">${escapeHtml(String(machine.port || 'â€”'))}</div>
           </div>
           <div class="data-cell">
             <span class="label-xs">${escapeHtml(t('card_mode'))}</span>
@@ -671,11 +672,11 @@ function fullRenderMachinePanel() {
     </div>
   `;
 
-  // ── Bind machine panel events ──
+  // â”€â”€ Bind machine panel events â”€â”€
   bindMachinePanelEvents();
 }
 
-// ── Bind all interactive event handlers for the machine panel ──
+// â”€â”€ Bind all interactive event handlers for the machine panel â”€â”€
 function bindMachinePanelEvents() {
   const machine = activeMachine;
   const isBusy = machine.status !== "IDLE";
@@ -753,7 +754,7 @@ function bindMachinePanelEvents() {
   }
 }
 
-// ── Fetch recipes for dropdown ──
+// â”€â”€ Fetch recipes for dropdown â”€â”€
 async function fetchMachineRecipes(machineId, menuEl) {
   menuEl.innerHTML = `
     <div class="loading">
@@ -798,9 +799,9 @@ async function fetchMachineRecipes(machineId, menuEl) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Terminal Event Log Rendering
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function renderEvents() {
   const evJson = JSON.stringify(events) + currentLang;
@@ -881,9 +882,9 @@ function renderEvents() {
   eventLogEl.scrollTop = eventLogEl.scrollHeight;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // UI State Transitions
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function clearScan() {
   activeMachine = null;
@@ -912,9 +913,9 @@ function showMachineMode(machine) {
   renderLeftPanel();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // API Calls
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 async function lookupMachine(serial) {
   const trimmed = serial.trim();
@@ -1023,6 +1024,8 @@ async function fetchStatus() {
     const res = await fetch("/api/status");
     const data = await res.json();
     events = data.events || [];
+    pendingRecipes = data.pending_recipes || [];
+    renderPendingAlerts();
     renderEvents();
     if (activeMachine) {
       const updated = data.machines.find(m => m.id === activeMachine.id);
@@ -1054,9 +1057,9 @@ if (clearLogBtn) {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // WebSocket
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function startPolling() {
   stopPolling();
@@ -1083,6 +1086,8 @@ function connectWS() {
   socket.addEventListener("message", (e) => {
     const data = JSON.parse(e.data);
     events = data.events || [];
+    pendingRecipes = data.pending_recipes || [];
+    renderPendingAlerts();
     renderEvents();
     if (activeMachine) {
       const updated = data.machines.find(m => m.id === activeMachine.id);
@@ -1106,9 +1111,9 @@ function connectWS() {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Init
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 applyI18n();
 renderScanArea();
 renderLeftPanel();
@@ -1116,3 +1121,58 @@ renderEvents();
 connectWS();
 fetchStatus();
 startPolling();
+
+
+
+async function approveRecipe(recipeName) {
+  try {
+    const res = await fetch('/api/recipes/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipe_name: recipeName })
+    });
+    if (!res.ok) console.error('Approve failed');
+  } catch (err) { console.error(err); }
+}
+
+async function rejectRecipe(recipeName) {
+  try {
+    const res = await fetch('/api/recipes/reject', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipe_name: recipeName })
+    });
+    if (!res.ok) console.error('Reject failed');
+  } catch (err) { console.error(err); }
+}
+
+function renderPendingAlerts() {
+  let container = document.getElementById('pendingAlertArea');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'pendingAlertArea';
+    const split = document.querySelector('.body-split');
+    if (split) { split.parentNode.insertBefore(container, split); }
+  }
+  
+  if (!pendingRecipes || pendingRecipes.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  
+  let html = '';
+  pendingRecipes.forEach(recipe => {
+    html += `
+      <div style="background-color: var(--warn); color: var(--warn-foreground); padding: 12px 16px; margin-bottom: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div>
+          <strong>Duplicate Recipe Detected:</strong> ${escapeHtml(recipe)} already exists on the Host.
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="approveRecipe('${escapeHtml(recipe)}')" style="background-color: var(--ok); color: var(--ok-foreground); border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Approve Update</button>
+          <button onclick="rejectRecipe('${escapeHtml(recipe)}')" style="background-color: var(--error); color: var(--error-foreground); border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Reject</button>
+        </div>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+}

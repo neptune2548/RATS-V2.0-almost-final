@@ -1,136 +1,29 @@
-# database.py
+"""Combined machine registry kept as the stable import point for the system.
 
-# จำลองตารางข้อมูลเครื่องจักร (รอเปลี่ยนเป็น SQL ในอนาคต)
-MACHINE_DB = {
-    # รหัสบาร์โค้ด หรือ Asset Tag ที่เราสมมติขึ้นมาแปะหน้าเครื่อง
-    "WB#76": {
-        "name": "Wire Bonder #76",
-        "ip": "169.254.13.76",
-        "port": 5001,
-        "session_id": 0
-    },
+Production-line data lives in separate modules so each section can be updated
+independently without changing the backend, Section Manager, or test tools.
+"""
 
-    "WB#77": {
-        "name": "Wire Bonder #77",
-        "ip": "169.254.13.77",
-        "port": 5001,
-        "session_id": 0
-    },
+from Advanced_Wirebond import MACHINE_DB as ADVANCED_MACHINE_DB
+from Advanced_Wirebond import SERIAL_TO_MACHINE as ADVANCED_SERIAL_TO_MACHINE
+from IC_WireBond import MACHINE_DB as IC_MACHINE_DB
+from IC_WireBond import SERIAL_TO_MACHINE as IC_SERIAL_TO_MACHINE
 
-    "WB#78": {
-        "name": "Wire Bonder #78",
-        #old "ip": "192.168.10.78",
-        "ip": "169.254.13.78",
-        "port": 5001,
-        "session_id": 0
-    },
 
-    "WB#79": {
-        "name": "Wire Bonder #79",
-        "ip": "169.254.13.79",
-        "port": 5001,
-        "session_id": 0
-    },
+def _merge_unique(label, *registries):
+    merged = {}
+    for registry in registries:
+        duplicates = merged.keys() & registry.keys()
+        if duplicates:
+            duplicate_list = ", ".join(sorted(duplicates))
+            raise ValueError(f"Duplicate {label}: {duplicate_list}")
+        merged.update(registry)
+    return merged
 
-    "WB#80": {
-        "name": "Wire Bonder #80",
-        "ip": "169.254.13.80",
-        "port": 5001,
-        "session_id": 0
-    },
 
-    "WB#81": {
-        "name": "Wire Bonder #81",
-        #old "ip": "192.168.10.81",
-        "ip": "169.254.13.81",
-        "port": 5001,
-        "session_id": 0
-    },
-    
-    "WB#82": {
-        "name": "Wire Bonder #82",
-        #ip": "192.168.11.82",
-        "ip": "169.254.13.82",
-        "port": 5001,
-        "session_id": 0
-    },
-    "WB#83": {
-        "name": "Wire Bonder #83",
-        #"ip": "192.168.11.83",
-        "ip": "169.254.13.83",
-        "port": 5001,
-        "session_id": 0
-    },
-    "WB#84": {
-        "name": "Wire Bonder #84",
-        #"ip": "192.168.11.84",
-        "ip": "169.254.13.84",
-        "port": 5001,
-        "session_id": 0
-    },
-
-    "WB#85": {
-        "name": "Wire Bonder #85",
-        #"ip": "192.168.11.85",
-        "ip": "169.254.13.85",
-        "port": 5001,
-        "session_id": 0
-    },
-
-    "WB#86": {
-        "name": "Wire Bonder #86",
-        "ip": "169.254.13.86",
-        #"ip": "192.168.11.86",
-        "port": 5001,
-        "session_id": 0
-    },
-
-    "WB#87": {
-        "name": "Wire Bonder #87",
-        #"ip": "192.168.11.87",
-        "ip": "169.254.13.87",
-        "port": 5001,
-        "session_id": 0
-    },
-    "WB#88": {
-        "name": "Wire Bonder #88",
-        #"ip": "192.168.11.88",
-        "ip": "169.254.13.88",
-        "port": 5001,
-        "session_id": 0
-    },
-    "WB#89": {
-        "name": "Wire Bonder #89",
-        #"ip": "192.168.11.89",
-        "ip": "169.254.13.89",
-        "port": 5001,
-        "session_id": 0
-    },
-    "WB#90": {
-        "name": "Wire Bonder #90",
-        #"ip": "192.168.11.90",
-        "ip": "169.254.13.90",
-        "port": 5001,
-        "session_id": 0
-    }
-}
-SERIAL_TO_MACHINE = {
-    "WB#76": "WB#76",
-    "WB#77": "WB#77",
-    "WB#78": "WB#78",
-    "WB#79": "WB#79",
-    "WB#80": "WB#80",
-    "WB#81": "WB#81",
-    "WB#82": "WB#82",
-    "WB#83": "WB#83",
-    "WB#84": "WB#84",
-    "WB#85": "WB#85",
-    "WB#86": "WB#86",
-    "WB#87": "WB#87",
-    "WB#88": "WB#88",
-    "WB#89": "WB#89",
-    "WB#90": "WB#90",
-    "IX01-023": "WB#82",
-    "IX01-025": "WB#83",
-    "IX01-028": "WB#84"
-}
+MACHINE_DB = _merge_unique("machine IDs", ADVANCED_MACHINE_DB, IC_MACHINE_DB)
+SERIAL_TO_MACHINE = _merge_unique(
+    "machine serials",
+    ADVANCED_SERIAL_TO_MACHINE,
+    IC_SERIAL_TO_MACHINE,
+)

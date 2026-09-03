@@ -44,6 +44,7 @@ WORKER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worker
 STATE_DIR     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
 COMMANDS_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commands")
 LOGS_DIR      = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+HEARTBEAT_DIR = os.path.join(STATE_DIR, "heartbeats")
 
 HEALTHCHECK_INTERVAL_SEC  = 3       # Check worker health every N seconds
 BASE_RESTART_DELAY_SEC    = 5       # Initial restart delay
@@ -110,6 +111,7 @@ class WorkerSupervisor:
         self.restart_count = 0
         self.last_start_time = 0
         self.last_restart_delay = BASE_RESTART_DELAY_SEC
+        self.restart_scheduled_at = 0
 
     def start(self):
         """Launch (or re-launch) the worker subprocess hidden, logging to file."""
@@ -121,7 +123,12 @@ class WorkerSupervisor:
         os.makedirs(LOGS_DIR, exist_ok=True)
         safe_id = self.machine_id.replace("#", "")
         log_path = os.path.join(LOGS_DIR, f"{safe_id}.log")
-        self.log_file = open(log_path, "a", encoding="utf-8")
+        if self.log_file:
+            try:
+                self.log_file.close()
+            except OSError:
+                pass
+            self.log_file = None
 
         creation_flags = 0
         if os.name == "nt":
@@ -129,18 +136,38 @@ class WorkerSupervisor:
 
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
+        env["ARC_WORKER_PARENT_WATCH"] = "1"
 
-        self.process = subprocess.Popen(
-            [sys.executable, WORKER_SCRIPT, "--machine", self.machine_id],
-            creationflags=creation_flags,
-            stdout=self.log_file,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.PIPE,
-            bufsize=1,
-            universal_newlines=True,
-            env=env
-        )
+        try:
+            self.log_file = open(log_path, "a", encoding="utf-8")
+            self.process = subprocess.Popen(
+                [sys.executable, WORKER_SCRIPT, "--machine", self.machine_id],
+                creationflags=creation_flags,
+                stdout=self.log_file,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.PIPE,
+                bufsize=1,
+                universal_newlines=True,
+                env=env
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            if self.log_file:
+                try:
+                    self.log_file.close()
+                except OSError:
+                    pass
+                self.log_file = None
+            self.process = None
+            delay = self.get_restart_delay()
+            self.restart_scheduled_at = time.time() + delay
+            log({
+                "EN": f"Could not start worker: {exc}. Recovery scheduled in {delay}s.",
+                "TH": f"ไม่สามารถเริ่ม worker ได้: {exc} ระบบจะลองกู้คืนใน {delay} วินาที"
+            }, "ERROR", self.machine_id)
+            return False
         self.last_start_time = time.time()
+        self.restart_scheduled_at = 0
+        return True
 
     def is_alive(self):
         """Check if the subprocess PID is still running."""
@@ -148,28 +175,25 @@ class WorkerSupervisor:
 
     def is_frozen(self):
         """
-        Check if the worker is alive but hasn't updated its state file recently.
-        This catches workers that are stuck in a deadlock or infinite wait.
+        Check the worker's private heartbeat rather than dashboard state.
+        Quiet machines do not rewrite state files when nothing changed.
         """
         if not self.is_alive():
             return False
 
-        state_file = os.path.join(STATE_DIR, f"{self.machine_id.replace('#', '')}.json")
-        if not os.path.exists(state_file):
+        heartbeat_file = os.path.join(
+            HEARTBEAT_DIR,
+            f"{self.machine_id.replace('#', '')}.heartbeat",
+        )
+        if not os.path.exists(heartbeat_file):
             # Worker just started — give it time
             if (time.time() - self.last_start_time) < STALE_STATE_TIMEOUT_SEC:
                 return False
             return True
 
         try:
-            with open(state_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            updated_at = data.get("updated_at", "")
-            if not updated_at:
-                return False
-            last_update = time.mktime(time.strptime(updated_at, "%Y-%m-%d %H:%M:%S"))
-            return (time.time() - last_update) > STALE_STATE_TIMEOUT_SEC
-        except (json.JSONDecodeError, OSError, ValueError):
+            return (time.time() - os.path.getmtime(heartbeat_file)) > STALE_STATE_TIMEOUT_SEC
+        except OSError:
             return False
 
     def get_restart_delay(self):
@@ -319,21 +343,22 @@ def main():
             for machine_id, sup in supervisors.items():
                 # ── Case 1: Worker process died ──
                 if not sup.is_alive():
-                    exit_code = sup.process.returncode if sup.process else "?"
-                    sup.restart_count += 1
+                    now = time.time()
+                    if not sup.restart_scheduled_at:
+                        exit_code = sup.process.returncode if sup.process else "?"
+                        sup.restart_count += 1
 
-                    # If worker ran for >60s before dying, reset backoff (was healthy for a while)
-                    if (time.time() - sup.last_start_time) > 60:
-                        sup.reset_backoff()
+                        # If worker ran for >60s before dying, reset backoff (was healthy for a while)
+                        if (now - sup.last_start_time) > 60:
+                            sup.reset_backoff()
 
-                    delay = sup.get_restart_delay()
-                    log({
-                        "EN": f"Worker crashed (exit code: {exit_code}). Restarting in {delay}s... (total restarts: {sup.restart_count})",
-                        "TH": f"Worker หยุดทำงาน (exit code: {exit_code}) จะ restart ใน {delay} วินาที... (restart ทั้งหมด: {sup.restart_count} ครั้ง)"
-                    }, "ALERT", machine_id)
-                    time.sleep(delay)
-
-                    if running:  # Check again after sleep
+                        delay = sup.get_restart_delay()
+                        sup.restart_scheduled_at = now + delay
+                        log({
+                            "EN": f"Worker stopped (exit code: {exit_code}). Recovery scheduled in {delay}s. (total restarts: {sup.restart_count})",
+                            "TH": f"Worker หยุดทำงาน (exit code: {exit_code}) ระบบจะกู้คืนใน {delay} วินาที (restart ทั้งหมด: {sup.restart_count} ครั้ง)"
+                        }, "ALERT", machine_id)
+                    elif now >= sup.restart_scheduled_at and running:
                         sup.start()
 
                 # ── Case 2: Worker alive but frozen (no state updates) ──
@@ -344,8 +369,8 @@ def main():
                     }, "ALERT", machine_id)
                     sup.stop()
                     sup.restart_count += 1
-                    if running:
-                        sup.start()
+                    delay = sup.get_restart_delay()
+                    sup.restart_scheduled_at = time.time() + delay
 
             # ── Write supervisor state ──
             write_manager_state(supervisors, start_time)

@@ -2,6 +2,8 @@
 TITLE ARC Industrial Command Center — Master Launcher v0.3
 color 0B
 
+if exist "%~dp0rats_secrets.local.bat" call "%~dp0rats_secrets.local.bat"
+
 echo.
 echo  ======================================================================
 echo  :          ARC INDUSTRIAL COMMAND CENTER v0.3 — Full Stack           :

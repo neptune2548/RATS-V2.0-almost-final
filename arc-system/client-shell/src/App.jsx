@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth, ROLES } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { LanguageProvider } from './context/LanguageContext';
+import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { RatsView } from './views/RatsView';
 import { SystemView } from './views/SystemView';
+import { AlertTriangle } from 'lucide-react';
 
 const MainContent = () => {
   const [activeTab, setActiveTab] = useState('rats');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [targetRoleRequired, setTargetRoleRequired] = useState(null);
 
-  const { canViewRats, isGuest } = useAuth();
+  const { sessionWarningSeconds, staySignedIn } = useAuth();
 
   const handleOpenAuthModal = (requiredRole = null) => {
     setTargetRoleRequired(requiredRole);
@@ -34,13 +35,10 @@ const MainContent = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
-        {activeTab === 'rats' && canViewRats() && (
+        {activeTab === 'rats' && (
           <RatsView 
             onRequireElevatedAuth={(requiredRole) => handleOpenAuthModal(requiredRole)} 
           />
-        )}
-        {activeTab === 'rats' && isGuest() && (
-          <GuestAuthPrompt onLogin={() => handleOpenAuthModal(ROLES.OPERATOR)} />
         )}
         {activeTab === 'system' && (
           <SystemView 
@@ -60,12 +58,52 @@ const MainContent = () => {
         onClose={() => setIsAuthModalOpen(false)}
         targetRoleRequired={targetRoleRequired}
       />
+
+      <SessionTimeoutModal
+        seconds={sessionWarningSeconds}
+        onStaySignedIn={staySignedIn}
+      />
+    </div>
+  );
+};
+
+const SessionTimeoutModal = ({ seconds, onStaySignedIn }) => {
+  const { t } = useLanguage();
+  if (seconds == null) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4" role="alertdialog" aria-modal="true">
+      <div className="w-full max-w-sm overflow-hidden rounded-lg border-2 border-amber-400 bg-white shadow-2xl dark:border-amber-600 dark:bg-slate-900">
+        <div className="flex items-center gap-2.5 bg-amber-500 px-5 py-3.5 text-slate-950 font-mono-industrial">
+          <AlertTriangle className="h-5 w-5" />
+          <span className="text-sm font-bold uppercase tracking-wide">{t('session_timeout_title')}</span>
+        </div>
+        <div className="space-y-4 p-5 text-center">
+          <p className="text-sm text-slate-700 dark:text-slate-300">
+            {t('session_timeout_message')}
+          </p>
+          <div className="font-mono-industrial text-4xl font-black text-red-600 dark:text-red-400" aria-live="assertive">
+            {seconds} <span className="text-base">{t('seconds')}</span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t('session_timeout_help')}</p>
+          <button
+            type="button"
+            onClick={onStaySignedIn}
+            autoFocus
+            className="w-full rounded bg-emerald-600 px-5 py-2.5 text-sm font-bold tracking-wide text-white shadow hover:bg-emerald-700 font-mono-industrial"
+          >
+            {t('stay_signed_in')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
 
 // Guest authorization prompt shown when user tries to access RATS without login
-const GuestAuthPrompt = ({ onLogin }) => (
+const GuestAuthPrompt = ({ onLogin }) => {
+  const { t } = useLanguage();
+  return (
   <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
     <div className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl shadow-xl p-10 max-w-md w-full text-center space-y-4">
       <div className="flex justify-center">
@@ -75,20 +113,21 @@ const GuestAuthPrompt = ({ onLogin }) => (
           </svg>
         </span>
       </div>
-      <h2 className="font-header text-xl font-bold text-slate-900 dark:text-white uppercase tracking-wider">Authorization Required</h2>
+      <h2 className="font-header text-xl font-bold text-slate-900 dark:text-white uppercase tracking-wider">{t('guest_auth_title')}</h2>
       <p className="text-sm text-slate-600 dark:text-slate-400 font-mono">
-        Access to the <strong className="text-sky-600 dark:text-sky-400">RATS Command System</strong> requires an authenticated role.<br/>
-        Please log in with your authorized credentials to continue.
+        {t('guest_auth_access_before')} <strong className="text-sky-600 dark:text-sky-400">RATS Command System</strong> {t('guest_auth_access_after')}<br/>
+        {t('guest_auth_instruction')}
       </p>
       <button
         onClick={onLogin}
         className="mt-2 w-full px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-lg font-mono-industrial text-sm uppercase tracking-widest transition-colors shadow"
       >
-        Login / Authenticate
+        {t('login_authenticate')}
       </button>
     </div>
   </div>
-);
+  );
+};
 
 export default function App() {
   return (

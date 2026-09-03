@@ -1,0 +1,31 @@
+ARC Recipe Bot deployment for WB#82
+===================================
+
+Copy these two files into the same folder on the WB#82 equipment PC:
+
+  1. secs_proxy_bot.exe
+  2. config.ini
+
+Then:
+
+  1. Exit the old SECS ProxyBot if it is still running.
+  2. Put the two files in a folder where the normal equipment-PC user can
+     write files (the bot keeps its durable recipe_outbox beside the EXE).
+  3. Run secs_proxy_bot.exe once as the normal equipment-PC user.
+  4. Keep the RATS backend and Section Manager running on the host.
+
+Expected network flow:
+
+  - RATS host -> machine native SECS/GEM: 169.254.13.82:5001
+  - RATS host -> ARC Recipe Bot file channel: 169.254.13.82:5003
+  - No listener or connection on port 5002
+  - No HTTP upload from the equipment PC to host port 8080
+
+The bot watches C:\SYSTEM\BONDPROG for NPGM0.PWB through NPGMn.PWB,
+extracts Program Name as the real PPID, asks the local operator before a new
+or changed recipe is transferred, and sends the original PWB bytes through
+the authenticated port-5003 connection opened by the RATS host.
+
+If the host is temporarily disconnected after the operator accepts, the exact
+PWB snapshot remains in recipe_outbox and sends automatically after reconnect
+or after the equipment PC restarts.

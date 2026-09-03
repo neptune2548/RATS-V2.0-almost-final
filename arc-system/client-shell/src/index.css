@@ -189,3 +189,32 @@ header nav button {
 .dark ::-webkit-scrollbar-thumb {
   background: #334155;
 }
+
+/* Floor-map scrollbars stay visible so operators can discover overflow. */
+.industrial-scrollbar {
+  scrollbar-width: auto;
+  scrollbar-color: #64748b #e2e8f0;
+}
+.industrial-scrollbar::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+.industrial-scrollbar::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 6px;
+}
+.industrial-scrollbar::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
+}
+.dark .industrial-scrollbar {
+  scrollbar-color: #64748b #0f172a;
+}
+.dark .industrial-scrollbar::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+.dark .industrial-scrollbar::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-color: #0f172a;
+}

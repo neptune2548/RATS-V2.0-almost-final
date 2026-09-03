@@ -55,9 +55,16 @@ connections: set[WebSocket] = set()
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def snapshot() -> dict[str, Any]:
+    pending_recipes = []
+    bonding_prog = BASE_DIR / "BondingProg"
+    if bonding_prog.is_dir():
+        for file in bonding_prog.glob("*.pending"):
+            pending_recipes.append(file.name.replace(".PWB.pending", ""))
+            
     return {
         "machines": list(machines.values()),
         "events": event_log[-100:],
+        "pending_recipes": pending_recipes
     }
 
 
@@ -299,6 +306,51 @@ async def list_recipes(machine_id: str) -> JSONResponse:
         )
 
     return JSONResponse({"recipes": recipes})
+
+@app.post("/api/events")
+async def receive_event(body: dict) -> JSONResponse:
+    level = body.get("level", "INFO")
+    message = body.get("message")
+    if message:
+        add_event(message, level)
+        await broadcast_state()
+        return JSONResponse({"status": "ok"})
+    return JSONResponse({"error": "missing message"}, status_code=400)
+
+@app.post("/api/recipes/approve")
+async def approve_recipe(body: dict) -> JSONResponse:
+    recipe_name = body.get("recipe_name")
+    if not recipe_name:
+        return JSONResponse({"error": "recipe_name required"}, status_code=400)
+    
+    bonding_prog = BASE_DIR / "BondingProg"
+    pending_file = bonding_prog / f"{recipe_name}.PWB.pending"
+    target_file = bonding_prog / f"{recipe_name}.PWB"
+    
+    if pending_file.exists():
+        if target_file.exists():
+            target_file.unlink()
+        pending_file.rename(target_file)
+        add_event({"EN": f"Recipe {recipe_name} update approved and saved.", "TH": f"อนุมัติอัปเดต Recipe {recipe_name} เรียบร้อย"}, "SUCCESS")
+        await broadcast_state()
+        return JSONResponse({"status": "ok"})
+    return JSONResponse({"error": "Pending recipe not found"}, status_code=404)
+
+@app.post("/api/recipes/reject")
+async def reject_recipe(body: dict) -> JSONResponse:
+    recipe_name = body.get("recipe_name")
+    if not recipe_name:
+        return JSONResponse({"error": "recipe_name required"}, status_code=400)
+    
+    bonding_prog = BASE_DIR / "BondingProg"
+    pending_file = bonding_prog / f"{recipe_name}.PWB.pending"
+    
+    if pending_file.exists():
+        pending_file.unlink()
+        add_event({"EN": f"Recipe {recipe_name} update rejected.", "TH": f"ปฏิเสธการอัปเดต Recipe {recipe_name}"}, "ALERT")
+        await broadcast_state()
+        return JSONResponse({"status": "ok"})
+    return JSONResponse({"error": "Pending recipe not found"}, status_code=404)
 
 
 @app.websocket("/ws")

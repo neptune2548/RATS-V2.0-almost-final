@@ -50,11 +50,12 @@ def _watch_parent():
     finally:
         os._exit(0)
 
-threading.Thread(target=_watch_parent, daemon=True).start()
+if os.getenv("ARC_WORKER_PARENT_WATCH") == "1":
+    threading.Thread(target=_watch_parent, daemon=True).start()
 
 from secsgem.hsms import HsmsSettings
 from secsgem.gem import GemHostHandler
-from secsgem.secs.functions import SecsS07F06
+from secsgem.secs.functions import SecsS07F06, SecsS07F17, SecsS07F18
 
 from database import MACHINE_DB
 
@@ -67,9 +68,11 @@ logging.basicConfig(level=logging.WARNING)
 
 STATE_DIR    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state")
 COMMANDS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commands")
+HEARTBEAT_DIR = os.path.join(STATE_DIR, "heartbeats")
 
 CONNECT_TIMEOUT_SEC       = 3       # seconds to wait for initial handshake
-POLL_INTERVAL_SEC         = 3.0     # SVID poll every N seconds
+POLL_INTERVAL_SEC         = 10.0    # Check SVIDs; publish only when values change
+HEARTBEAT_INTERVAL_SEC    = 10.0    # Internal worker health, not dashboard state
 COMMAND_CHECK_INTERVAL    = 1.0     # check command queue every N seconds
 RECONNECT_DELAY_SEC       = 5       # wait before reconnect attempt
 MAX_CONSECUTIVE_FAILURES  = 10      # consecutive poll failures before reconnect
@@ -119,6 +122,22 @@ LEVEL_ICONS = {
     "ERROR":   "❌",
 }
 
+
+def _safe_console_line(line):
+    """A diagnostic message must never be able to terminate a worker."""
+    try:
+        print(line, flush=True)
+    except (UnicodeEncodeError, UnicodeError):
+        encoding = getattr(sys.stdout, "encoding", None) or "ascii"
+        safe_line = str(line).encode(encoding, errors="replace").decode(encoding, errors="replace")
+        try:
+            print(safe_line, flush=True)
+        except Exception:
+            pass
+    except (OSError, ValueError):
+        # stdout may disappear while Windows is closing a launcher window.
+        pass
+
 def log(machine_id, message, level="INFO"):
     """
     Print a human-readable timestamped log line.
@@ -133,9 +152,16 @@ def log(machine_id, message, level="INFO"):
     if isinstance(message, dict):
         en = message.get("EN", "")
         th = message.get("TH", "")
-        print(f"[{ts}] {icon} [{machine_id}] {en}  |  {th}", flush=True)
+        _safe_console_line(f"[{ts}] {icon} [{machine_id}] {en}  |  {th}")
     else:
-        print(f"[{ts}] {icon} [{machine_id}] {message}", flush=True)
+        _safe_console_line(f"[{ts}] {icon} [{machine_id}] {message}")
+
+    try:
+        import urllib.request, json
+        req = urllib.request.Request("http://127.0.0.1:8080/api/internal/events", data=json.dumps({"machine_id": machine_id, "level": level, "message": message}).encode('utf-8'), headers={'Content-Type': 'application/json'})
+        urllib.request.urlopen(req, timeout=1)
+    except Exception:
+        pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -193,6 +219,21 @@ def command_result_path(machine_id):
     return os.path.join(COMMANDS_DIR, f"{_safe_id(machine_id)}_result.json")
 
 
+def heartbeat_path(machine_id):
+    return os.path.join(HEARTBEAT_DIR, f"{_safe_id(machine_id)}.heartbeat")
+
+
+def write_heartbeat(machine_id):
+    """Update supervisor liveness without changing dashboard machine state."""
+    try:
+        os.makedirs(HEARTBEAT_DIR, exist_ok=True)
+        path = heartbeat_path(machine_id)
+        with open(path, "a", encoding="ascii"):
+            os.utime(path, None)
+    except OSError:
+        pass
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # State File I/O (atomic write to prevent dashboard reading half-written files)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -226,6 +267,17 @@ def write_state(machine_id, values, connection_status, machine_name=""):
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         os.replace(tmp, state_path(machine_id))
+        try:
+            import urllib.request
+            event_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            request = urllib.request.Request(
+                "http://127.0.0.1:8080/api/internal/connection-status",
+                data=event_body,
+                headers={"Content-Type": "application/json"},
+            )
+            urllib.request.urlopen(request, timeout=1).close()
+        except Exception:
+            pass
     except OSError as e:
         log(machine_id, {"EN": f"Failed to write state file: {e}",
                          "TH": f"เขียนไฟล์สถานะล้มเหลว: {e}"}, "ALERT")
@@ -336,21 +388,24 @@ def handle_command(host, machine_id, cmd):
     """Process a command from the RATS command queue."""
     action = cmd.get("action", "").strip()
 
-    if action == "select_recipe":
-        _handle_select_recipe(host, machine_id, cmd)
-    elif action == "pull_recipe_list":
-        _handle_pull_recipe_list(host, machine_id)
-    elif action == "pull_recipe":
-        _handle_pull_recipe(host, machine_id, cmd)
-    elif action == "push_recipe":
-        _handle_push_recipe(host, machine_id, cmd)
-    elif action == "delete_recipe":
-        _handle_delete_recipe(host, machine_id, cmd)
-    else:
-        msg = {"EN": f"Unknown command '{action}' received. Ignoring.",
-               "TH": f"ได้รับคำสั่ง '{action}' ที่ไม่รู้จัก ข้ามไป"}
-        log(machine_id, msg, "ALERT")
-        write_command_result(machine_id, "error", msg)
+    try:
+        if action == "select_recipe":
+            _handle_select_recipe(host, machine_id, cmd)
+        elif action == "pull_recipe_list":
+            _handle_pull_recipe_list(host, machine_id)
+        elif action == "pull_recipe":
+            _handle_pull_recipe(host, machine_id, cmd)
+        elif action == "push_recipe":
+            _handle_push_recipe(host, machine_id, cmd)
+        elif action == "delete_recipe":
+            _handle_delete_recipe(host, machine_id, cmd)
+        else:
+            msg = {"EN": f"Unknown command '{action}' received. Ignoring.",
+                   "TH": f"ได้รับคำสั่ง '{action}' ที่ไม่รู้จัก ข้ามไป"}
+            log(machine_id, msg, "ALERT")
+            write_command_result(machine_id, "error", msg)
+    finally:
+        clear_command(machine_id)
 
 def _handle_delete_recipe(host, machine_id, cmd):
     recipe_name = cmd.get("recipe", "").strip()
@@ -833,9 +888,11 @@ def run_worker(machine_id):
     target = MACHINE_DB[machine_id]
     machine_name = target.get("name", machine_id)
     svid_list = list(POLL_SVIDS.keys())
+    offline_announced = False
 
     os.makedirs(STATE_DIR, exist_ok=True)
     os.makedirs(COMMANDS_DIR, exist_ok=True)
+    os.makedirs(HEARTBEAT_DIR, exist_ok=True)
 
     # ── Graceful shutdown handler ────────────────────────────────────────
     shutdown_requested = False
@@ -850,14 +907,13 @@ def run_worker(machine_id):
 
     # ── Outer reconnect loop ────────────────────────────────────────────
     while not shutdown_requested:
+        # Offline/reconnecting workers must also prove the process is alive.
+        write_heartbeat(machine_id)
         host = None
         try:
-            # ── CONNECTING state ──
-            write_state(machine_id, {}, "CONNECTING", machine_name)
-            log(machine_id, {
-                "EN": f"Connecting to {machine_name} ({target['ip']}:{target['port']})...",
-                "TH": f"กำลังเชื่อมต่อไปยัง {machine_name} ({target['ip']}:{target['port']})..."
-            }, "INFO")
+            # Reconnect attempts run silently in the background.  The operator
+            # only needs the stable OFFLINE/ONLINE state, not every retry.
+            write_state(machine_id, {}, "OFFLINE", machine_name)
 
             settings = HsmsSettings(
                 address=target["ip"],
@@ -871,10 +927,12 @@ def run_worker(machine_id):
             # Wait for communication with the configured timeout
             if not host.waitfor_communicating(timeout=CONNECT_TIMEOUT_SEC):
                 write_state(machine_id, {}, "OFFLINE", machine_name)
-                log(machine_id, {
-                    "EN": f"Could not connect to {machine_name} within {CONNECT_TIMEOUT_SEC}s. Machine is offline.",
-                    "TH": f"ไม่สามารถเชื่อมต่อ {machine_name} ได้ภายใน {CONNECT_TIMEOUT_SEC} วินาที เครื่องออฟไลน์"
-                }, "ALERT")
+                if not offline_announced:
+                    log(machine_id, {
+                        "EN": f"{machine_name} is offline.",
+                        "TH": f"{machine_name} ออฟไลน์"
+                    }, "ALERT")
+                    offline_announced = True
                 host.disable()
                 host = None
                 time.sleep(RECONNECT_DELAY_SEC)
@@ -886,31 +944,60 @@ def run_worker(machine_id):
                 "EN": f"Connected to {machine_name} successfully.",
                 "TH": f"เชื่อมต่อ {machine_name} สำเร็จแล้ว"
             }, "SUCCESS")
+            offline_announced = False
 
             consecutive_failures = 0
             last_poll_time = -POLL_INTERVAL_SEC  # Fire first poll immediately on connect
+            last_heartbeat_time = -HEARTBEAT_INTERVAL_SEC
             last_cmd_time  = 0
+            last_values = None
 
             # ── Inner polling loop (stays here while connection is alive) ──
             while not shutdown_requested:
                 now = time.time()
 
-                # ── MEMS: Poll SVIDs at the configured interval ──
+                # If connection dropped, break inner loop to reconnect
+                if host.communication_state.current.name != "COMMUNICATING":
+                    if not offline_announced:
+                        log(machine_id, {
+                            "EN": f"Connection to {machine_name} was lost. Machine is offline.",
+                            "TH": f"การเชื่อมต่อ {machine_name} หลุด เครื่องจักรออฟไลน์"
+                        }, "ALERT")
+                        offline_announced = True
+                    break
+
+                # Keep supervisor health separate from dashboard machine state.
+                if (now - last_heartbeat_time) >= HEARTBEAT_INTERVAL_SEC:
+                    last_heartbeat_time = now
+                    write_heartbeat(machine_id)
+
+                # The equipment cannot publish state-change events, so check at a
+                # controlled rate and only publish when an SVID value changes.
                 if (now - last_poll_time) >= POLL_INTERVAL_SEC:
                     last_poll_time = now
                     values = poll_once(host, machine_id, svid_list)
-
-                    if values is not None:
-                        write_state(machine_id, values, "ONLINE", machine_name)
-                        consecutive_failures = 0
-                    else:
+                    if values is None:
                         consecutive_failures += 1
                         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                            log(machine_id, {
-                                "EN": f"Lost contact with {machine_name} after {MAX_CONSECUTIVE_FAILURES} failed attempts. Reconnecting...",
-                                "TH": f"สูญเสียการติดต่อกับ {machine_name} หลังจากล้มเหลว {MAX_CONSECUTIVE_FAILURES} ครั้ง กำลังเชื่อมต่อใหม่..."
-                            }, "ALERT")
-                            break  # Break to outer reconnect loop
+                            if not offline_announced:
+                                log(machine_id, {
+                                    "EN": f"Contact with {machine_name} was lost. Machine is offline.",
+                                    "TH": f"การเชื่อมต่อ {machine_name} หลุด เครื่องจักรออฟไลน์"
+                                }, "ALERT")
+                                offline_announced = True
+                            break
+                    else:
+                        consecutive_failures = 0
+                        if last_values is None or values != last_values:
+                            if last_values is not None:
+                                changed = [POLL_SVIDS.get(svid, str(svid)) for svid in svid_list
+                                           if values.get(svid) != last_values.get(svid)]
+                                log(machine_id, {
+                                    "EN": "Machine state changed: " + ", ".join(changed),
+                                    "TH": "สถานะเครื่องเปลี่ยนแปลง: " + ", ".join(changed)
+                                }, "INFO")
+                            write_state(machine_id, values, "ONLINE", machine_name)
+                            last_values = values
 
                 # ── RATS: Check command queue ──
                 if (now - last_cmd_time) >= COMMAND_CHECK_INTERVAL:
@@ -938,11 +1025,14 @@ def run_worker(machine_id):
 
             # ── If not shutting down, mark CONN. LOST and retry ──
             if not shutdown_requested:
-                write_state(machine_id, {}, "CONN. LOST", machine_name)
-                log(machine_id, {
-                    "EN": f"Connection to {machine_name} lost. Retrying in {RECONNECT_DELAY_SEC} seconds...",
-                    "TH": f"การเชื่อมต่อ {machine_name} หลุด รอ {RECONNECT_DELAY_SEC} วินาทีแล้วลองใหม่..."
-                }, "ALERT")
+                current_state = ""
+                try:
+                    with open(state_path(machine_id), "r", encoding="utf-8") as fs:
+                        current_state = json.load(fs).get("connection_status", "")
+                except (json.JSONDecodeError, OSError):
+                    pass
+                if current_state != "OFFLINE":
+                    write_state(machine_id, {}, "CONN. LOST", machine_name)
                 time.sleep(RECONNECT_DELAY_SEC)
 
     # ── Final shutdown ───────────────────────────────────────────────────

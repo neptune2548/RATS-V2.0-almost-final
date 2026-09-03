@@ -1,0 +1,45 @@
+ARC TCP Deployment Receiver
+===========================
+
+Purpose
+-------
+This one receiver works for WB#76 through WB#90. It listens for the RATS host
+on authenticated TCP port 5004 and accepts only:
+
+  - secs_proxy_bot.exe
+  - config.ini
+
+Recommended folders
+-------------------
+Keep the Deployment Receiver separate from Recipe Bot:
+
+  Receiver:   C:\ARCDeployReceiver
+  Recipe Bot: C:\ARCRecipeBot
+
+Do not place both applications in the same folder because each uses a file
+named config.ini.
+
+Bootstrap
+---------
+TCPBOT.PWB is byte-for-byte identical to arc_deployment_receiver.exe. Use the
+equipment bootstrap procedure already validated at your site, then run the
+resulting receiver application once. The receiver registers itself in Windows
+Startup for the current equipment-PC user.
+
+Network
+-------
+  Host -> machine TCP Deployment Receiver: 5004
+  Host -> machine Recipe Bot:               5003
+  Host -> machine native SECS/GEM:          5001
+
+The machine does not connect to host HTTP port 8080 for these file transfers.
+
+Dashboard use
+-------------
+Select the target machine, sign in as Technician or Administrator, choose
+secs_proxy_bot.exe and/or config.ini in the deployment panel, then press Send.
+The host sends each file directly to that selected machine on TCP 5004.
+
+If Recipe Bot is currently running and Windows locks its EXE, the receiver
+keeps the new file as secs_proxy_bot.exe.pending instead of losing it. Exit
+Recipe Bot, replace the old EXE with the pending file, and restart Recipe Bot.

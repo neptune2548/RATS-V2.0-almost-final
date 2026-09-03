@@ -1,178 +1,229 @@
 # RATS — Recipe Automated Transfer System
-### ARC Command Center V2.0 — Almost Final
 
-A centralized control system for managing and transferring wire bonding recipes across 15 Wire Bonder machines (WB76–WB90) via the SECS/GEM protocol. Supports real-time status monitoring, Pull (retrieve), and Push (deploy) operations with a role-based authorization system.
+## ARC Command Center V2.0 — Almost Final
 
----
+RATS is an internal factory-floor command center for monitoring Wire Bonder connectivity and transferring `.PWB` recipe files. The current release is RATS-only and covers 17 machines across two production sections.
 
-## What is this project?
+> Intended network: isolated Equipment LAN. Internet access is not required.
 
-RATS connects to Wire Bonder machines on the factory floor over SECS/GEM and lets authorized users:
-- **Check** the current recipe loaded on each machine (shown immediately on connect)
-- **Pull** the active recipe from a machine back to the server
-- **Push** a new recipe from the server to a machine
-- **Monitor** connection status and equipment state of all 15 machines in real-time
+## Current capabilities
 
-The system runs as a full-stack app: Python FastAPI backend handles the SECS/GEM communication, React frontend provides the UI dashboard.
+- Live SECS/GEM connection and active-recipe status for every registered machine.
+- Production Section tabs for **WB Advanced** and **IC Wire Bond**.
+- Floor-map overview with green Online and red Offline machine frames.
+- Expandable machine details by selecting a machine or scanning its QR/barcode.
+- Background reconnect without repeating retry messages in the operator event log.
+- Pull, Push, Delete, Recipe Bot deployment, and recipe-update approval workflows.
+- Thai/English UI, dark mode, employee audit, session timeout, and role-based access.
+- Guest users can see the machine map and status but cannot run commands.
+- Recipe Bot file channel and authenticated TCP deployment receiver for equipment-side PCs.
+- Production-readiness health checks for the backend, manager, workers, storage, disk, and credential policy.
 
----
+## Architecture
 
-## What is New in V2.0 — Almost Final (2026-08-18)
-
-### Changes from V0.1 → V2.0
-
-| Feature | V0.1 | V2.0 |
-|---|---|---|
-| Frontend | Single HTML + Vanilla JS file | React + Vite SPA |
-| Authentication | None | Role-based (Operator / Technician / Admin) |
-| Dashboard | RATS only | RATS system with real-time machine state |
-| Machine connections | Direct from main.py | Section Manager supervises all 15 machines |
-| Dark Mode | No | Yes (toggle in navbar) |
-| Language | Thai/English mixed | TH / EN toggle button |
-| Font loading | Google Fonts CDN | Fully local — no internet dependency at runtime |
-| Portable | No (hardcoded `C:\...` paths) | Yes — runs from any folder/drive on any PC |
-| Machine count | 12 (WB76–WB87) | 15 (WB76–WB90) |
-| Active recipe display | Manual pull only | Shows immediately on machine connect |
-
-### V2.0 Highlights
-- **Immediate recipe on connect** — worker polls ActiveRecipe the instant a machine comes online, no waiting
-- **Fully portable** — no hardcoded paths anywhere; all directories resolved from `__file__`
-- **Single `database.py`** — root-level only; deleted duplicate in `client-rats/`, no more sync issues
-- **Security** — no credentials exposed in UI, launcher, or README
-- **15 machines** — added WB88, WB89, WB90 to the registry
-- **Offline fonts** — Inter, JetBrains Mono, Chakra Petch served from `public/fonts/`
-- **Runtime state files excluded** — section-manager state and command JSONs are `.gitignore`d
-
----
-
-## Project Structure
-
+```text
+Operator browser :3000
+        |
+        v
+React/Vite UI <---- HTTP + WebSocket ----> FastAPI RATS backend :8080
+                                              |
+                                              v
+                                  Section Manager + workers
+                                      |       |       |
+                                   SECS/GEM  Recipe   Deploy
+                                     :5001   :5003    :5004
+                                      |       |       |
+                                      +--- Equipment PCs ---+
 ```
+
+The UI and backend run on the internal RATS host. The Section Manager supervises one worker per machine. Machine configuration is split by production section and aggregated through `database.py`.
+
+## Project structure
+
+```text
 RATS-V2.0-almost-final/
+├── Advanced_Wirebond.py          WB Advanced machine data and map positions
+├── IC_WireBond.py                IC Wire Bond machine data and map positions
+├── database.py                   Combined machine registry used by all services
 ├── arc-system/
-│   ├── client-rats/         RATS Backend — Python FastAPI (Port 8080)
-│   │   ├── main.py          API server + SECS/GEM orchestration
-│   │   ├── testpull.py      Pull recipe from machine
-│   │   ├── testpush.py      Push recipe to machine
-│   │   └── requirement.txt  Python dependencies (this service)
-│   │
-│   ├── client-shell/        React UI (Port 3000)
-│   │   └── src/
-│   │       ├── views/       RatsView
-│   │       ├── context/     AuthContext, ThemeContext, LanguageContext
-│   │       └── components/  Navbar, AuthModal
-│   │
-│   ├── section-manager/     SECS/GEM connection supervisor (15 machines)
-│   │   ├── manager.py       Supervisor — spawns and restarts workers
-│   │   └── worker.py        1 process per machine — polls SVIDs and handles commands
-│   │
-│   └── client-mems/         MEMS Backend (Port 8000) — kept, hidden in UI
-│
-├── database.py              ← Single source of truth for all machine IPs/ports
-├── requirement.txt          Root Python dependencies
-├── start_command_center.bat One-click launcher — starts all services
-├── stop_command_center.bat  Graceful shutdown for all services
-└── watch_log.bat            Tail a machine worker log in real-time
+│   ├── client-rats/
+│   │   ├── main.py               FastAPI backend, auth, recipes, audit, health
+│   │   └── test_*.py             Backend integration/regression tests
+│   ├── client-shell/             React/Vite operator UI
+│   └── section-manager/
+│       ├── manager.py            Worker supervisor and restart policy
+│       └── worker.py             SECS/GEM and Recipe Bot machine worker
+├── secs_proxy_bot/               Equipment-side recipe-transfer bot
+├── tcp_deploy_bot/               Equipment-side deployment receiver
+├── docs/manuals/                 Thai user/developer manuals and screenshots
+├── production-checklist.md       Production deployment checklist
+├── start_command_center.bat      Local/development launcher
+├── start_production.bat          Production build and launcher
+└── stop_command_center.bat       Graceful shutdown
 ```
 
----
+## Machine registry
 
-## How to Use
+### WB Advanced
 
-### Prerequisites
+| Machine | Host IP | SECS/GEM | Recipe Bot | Deploy |
+|---|---:|---:|---:|---:|
+| WB#76 | 192.168.10.76 | 5001 | 5003 | 5004 |
+| WB#77 | 192.168.10.77 | 5001 | 5003 | 5004 |
+| WB#78 | 192.168.10.78 | 5001 | 5003 | 5004 |
+| WB#79 | 192.168.10.79 | 5001 | 5003 | 5004 |
+| WB#80 | 192.168.10.80 | 5001 | 5003 | 5004 |
+| WB#81 | 192.168.10.81 | 5001 | 5003 | 5004 |
+| WB#82 | 192.168.11.82 | 5001 | 5003 | 5004 |
+| WB#83 | 192.168.11.83 | 5001 | 5003 | 5004 |
+| WB#84 | 192.168.10.84 | 5001 | 5003 | 5004 |
+| WB#85 | 192.168.10.85 | 5001 | 5003 | 5004 |
+| WB#86 | 192.168.10.86 | 5001 | 5003 | 5004 |
+| WB#87 | 192.168.10.87 | 5001 | 5003 | 5004 |
+| WB#88 | 192.168.10.88 | 5001 | 5003 | 5004 |
+| WB#89 | 192.168.10.89 | 5001 | 5003 | 5004 |
+| WB#90 | 192.168.10.90 | 5001 | 5003 | 5004 |
 
-- Python 3.11+
-- Node.js 18+
-- npm 9+
+### IC Wire Bond
 
-### Install Dependencies
+| Machine | Host IP | SECS/GEM | Recipe Bot | Deploy |
+|---|---:|---:|---:|---:|
+| WB#70 | 192.168.11.70 | 5001 | 5003 | 5004 |
+| WB#109 | 192.168.10.25 | 5001 | 5003 | 5004 |
 
-```bash
-# Python (from project root)
+Edit the appropriate section file rather than editing the combined registry:
+
+- `Advanced_Wirebond.py` for WB#76–WB#90.
+- `IC_WireBond.py` for WB#70 and WB#109.
+
+## Roles
+
+| Role | Access |
+|---|---|
+| Guest | View production tabs, map, and live machine status only |
+| Operator | Guest access plus recipe Pull and Push |
+| Technician | Operator access plus recipe Delete and update decisions |
+| Administrator | Administrative access and production-readiness status |
+| Developer | Full access including Recipe Bot file deployment |
+
+Guest commands and scans are blocked in the UI and return an insufficient-access notification. Dangerous backend operations also require authenticated role checks.
+
+## Requirements
+
+- Windows host PC
+- Python 3.11 or newer
+- Node.js 18 or newer
+- npm 9 or newer
+- Network routes from the RATS host to the registered equipment IPs
+
+Install dependencies from the repository root:
+
+```bat
 pip install -r requirement.txt
-
-# Node (first time only)
-cd arc-system/client-shell
+cd arc-system\client-shell
 npm install
 ```
 
-### Starting the System
+## Start the system
 
-**Option 1 — One-click (recommended):**
-```
-Double-click: start_command_center.bat
-```
+### New RATS server PC
 
-Starts all services in order:
-1. RATS SECS/GEM Engine — Port 8080
-2. MEMS Telemetry Engine — Port 8000
-3. Section Manager — manages all 15 machine SECS/GEM connections
-4. React UI dev server — Port 3000 (browser opens automatically)
+On a new Windows server, open the repository and run:
 
-**Option 2 — Manual:**
-```bash
-# Terminal 1
-cd arc-system/client-rats
-python main.py
-
-# Terminal 2
-cd arc-system/section-manager
-python manager.py
-
-# Terminal 3
-cd arc-system/client-shell
-npm run dev
+```text
+setup_new_rats_server.bat
 ```
 
-### Login / Authorization
+Run it with a network connection the first time. The installer requests Administrator permission, installs missing Python 3.11, Node.js LTS, and Git through Winget, installs project dependencies, builds the UI, generates server-only secrets, and creates restricted inbound Firewall rules for ports 3000 and 8080. When prompted for the allowed source, enter the approved Equipment LAN subnet or IP range instead of using a broad Internet-facing rule.
 
-Open http://localhost:3000 — you will see the "Authorization Required" screen.
+Generated credentials are stored in `rats_secrets.local.bat`, which is excluded from Git. Back it up in the approved password store. Copy the matching Recipe Bot and deployment tokens into the relevant equipment-side configuration during deployment.
 
-| Role | Description / Access |
-|---|---|
-| Guest | Auth prompt only |
-| Operator | View machine status and active recipes |
-| Technician | View + Pull / Push recipes |
-| Administrator | Full control including system configurations |
+### Existing/development server
 
-Sessions auto-expire after 5 minutes of inactivity and persist across page refreshes.
+For local/development operation:
 
-### Stopping the System
-
-```
-Double-click: stop_command_center.bat
-```
-Or press Ctrl+C in the React dev server window.
-
-### Watch Machine Logs (live)
-
-```bash
-watch_log.bat WB83
+```text
+Double-click start_command_center.bat
 ```
 
----
+For an internal production-style run:
 
-## Machine Registry
+```text
+Double-click start_production.bat
+```
 
-| Machine ID | Name | IP | Port |
-|---|---|---|---|
-| WB#76 | Wire Bonder #76 | 169.254.13.76 | 5001 |
-| WB#77 | Wire Bonder #77 | 169.254.13.77 | 5001 |
-| WB#78 | Wire Bonder #78 | 169.254.13.78 | 5001 |
-| WB#79 | Wire Bonder #79 | 169.254.13.79 | 5001 |
-| WB#80 | Wire Bonder #80 | 169.254.13.80 | 5001 |
-| WB#81 | Wire Bonder #81 | 169.254.13.81 | 5001 |
-| WB#82 | Wire Bonder #82 | 169.254.13.82 | 5001 |
-| WB#83 | Wire Bonder #83 | 169.254.13.83 | 5001 |
-| WB#84 | Wire Bonder #84 | 169.254.13.84 | 5001 |
-| WB#85 | Wire Bonder #85 | 169.254.13.85 | 5001 |
-| WB#86 | Wire Bonder #86 | 169.254.13.86 | 5001 |
-| WB#87 | Wire Bonder #87 | 169.254.13.87 | 5001 |
-| WB#88 | Wire Bonder #88 | 169.254.13.88 | 5001 |
-| WB#89 | Wire Bonder #89 | 169.254.13.89 | 5001 |
-| WB#90 | Wire Bonder #90 | 169.254.13.90 | 5001 |
+The launchers start:
 
-> Edit `database.py` (root) to change IPs or add machines. This is the single source of truth read by all services.
+1. FastAPI backend on TCP 8080.
+2. Section Manager and machine workers.
+3. React UI on TCP 3000.
+
+Open `http://localhost:3000` locally, or `http://<RATS-host-IP>:3000` from an authorized workstation on the Equipment LAN.
+
+Stop all components with `stop_command_center.bat`.
+
+## Production configuration
+
+Set unique production credentials and tokens before release. Do not keep the example/default values from development packages.
+
+```bat
+set RATS_HOST=0.0.0.0
+set RATS_PORT=8080
+set RATS_CORS_ORIGINS=http://<RATS-host-IP>:3000
+set RATS_RELOAD=false
+set RATS_OPERATOR_PASSWORD=<unique-password>
+set RATS_TECHNICIAN_PASSWORD=<unique-password>
+set RATS_ADMIN_PASSWORD=<unique-password>
+set RATS_DEVELOPER_PASSWORD=<unique-password>
+set RATS_PROXY_UPLOAD_TOKEN=<unique-recipe-bot-token>
+set RATS_DEPLOY_TOKEN=<unique-deployment-token>
+```
+
+The frontend normally derives backend host information from the browser URL. See `arc-system/client-shell/.env.example` only when an explicit API/WebSocket address is required.
+
+## Network and firewall
+
+Required internal paths:
+
+| Source | Destination | TCP port | Purpose |
+|---|---|---:|---|
+| Operator PCs | RATS host | 3000 | Web UI |
+| Operator/equipment network | RATS host | 8080 | API, WebSocket, and internal recipe upload endpoint |
+| RATS host | Equipment PCs | 5001 | SECS/GEM |
+| RATS host | Equipment PCs | 5003 | Recipe Bot file channel |
+| RATS host | Equipment PCs | 5004 | Deployment Receiver |
+
+Keep every firewall rule restricted to the Equipment LAN and approved source IP ranges. The current internal HTTP service is plain HTTP because it is designed for the isolated equipment network; deploy HTTPS if company policy requires it.
+
+## Verification
+
+Frontend production build:
+
+```bat
+cd arc-system\client-shell
+npm run build
+```
+
+Backend regression tests:
+
+```bat
+python -m unittest discover -s arc-system\client-rats -p "test_*.py"
+```
+
+Python syntax check for the core services:
+
+```bat
+python -m py_compile Advanced_Wirebond.py IC_WireBond.py database.py arc-system\client-rats\main.py arc-system\section-manager\manager.py arc-system\section-manager\worker.py
+```
+
+Before production release, follow `production-checklist.md`, replace all default credentials/tokens, verify backup/restore, and confirm the System Status page reports the required services as ready.
+
+## Notes
+
+- Reconnect attempts continue in the background without flooding the operator log.
+- A successful ping does not prove SECS/GEM is connected; machine Host Communication must also be enabled.
+- Recipe files (`*.PWB`) and runtime state/log files are intentionally excluded from Git.
+- The floor map currently uses schematic positions stored in each production-section data file and can be adjusted to match the physical layout.
 
 ---
 

@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { ShieldCheck, Sun, Moon, Server, Cpu, LogOut, LogIn, AlertTriangle, X, Globe } from 'lucide-react';
 
 export const Navbar = ({ activeTab, setActiveTab, onOpenAuthModal }) => {
-  const { currentRole, canViewRats, isGuest, logoutToGuest } = useAuth();
+  const { currentRole, employeeNumber, isGuest, logoutToGuest } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
   const [showLogoffConfirm, setShowLogoffConfirm] = useState(false);
@@ -90,7 +90,10 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuthModal }) => {
                 title="Login / Role Status"
               >
                 {isGuest() ? <LogIn className="w-3.5 h-3.5 text-slate-500" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                <span>{t('role')}<strong className="uppercase">{currentRole}</strong></span>
+                <span>
+                  {!isGuest() && <strong className="mr-1">EN:{employeeNumber}</strong>}
+                  {t('role')}<strong className="uppercase">{currentRole}</strong>
+                </span>
               </button>
 
               {!isGuest() && (
@@ -139,7 +142,7 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuthModal }) => {
             <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between font-mono-industrial">
               <div className="flex items-center gap-2.5">
                 <LogOut className="w-5 h-5 text-red-400" />
-                <span className="font-semibold text-sm tracking-wide uppercase">LOGOFF CONFIRMATION</span>
+                <span className="font-semibold text-sm tracking-wide uppercase">{t('logoff_title')}</span>
               </div>
               <button 
                 onClick={() => setShowLogoffConfirm(false)} 
@@ -156,9 +159,9 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuthModal }) => {
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">Log off current role?</h4>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">{t('logoff_question')}</h4>
                   <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                    You are currently logged in as <strong className="uppercase text-sky-600 dark:text-sky-400">{currentRole}</strong>. Are you sure you want to log off and return to Guest mode?
+                    {t('logoff_role_text')} <strong className="uppercase text-sky-600 dark:text-sky-400">{currentRole}</strong>. {t('logoff_return_guest')}
                   </p>
                 </div>
               </div>
@@ -169,7 +172,7 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuthModal }) => {
                   onClick={() => setShowLogoffConfirm(false)}
                   className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-semibold transition-colors"
                 >
-                  CANCEL
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={() => {
@@ -179,7 +182,7 @@ export const Navbar = ({ activeTab, setActiveTab, onOpenAuthModal }) => {
                   }}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-bold transition-colors shadow-sm uppercase tracking-wider"
                 >
-                  CONFIRM LOGOFF
+                  {t('confirm_logoff')}
                 </button>
               </div>
             </div>

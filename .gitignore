@@ -19,6 +19,8 @@ ENV/
 dist/
 build/
 *.egg
+*.o
+*.map
 pip-log.txt
 pip-delete-this-directory.txt
 
@@ -33,6 +35,9 @@ pnpm-debug.log*
 
 # ── Sandbox / development scratch ─────────────────────────────
 sandbox/
+docs/manuals/tmp_*/
+docs/manuals/render_temp*/
+docs/manuals/**/soffice_*/
 
 # ── Industrial UI redesign drafts (V0.1 pattern) ─────────────
 industrial-ui-redesign/
@@ -41,8 +46,6 @@ industrial-ui-redesign/
 node_modules/
 arc-system/client-shell/dist/
 arc-system/client-shell/.vite/
-arc-system/client-mems/mems-dashboard-component/node_modules/
-arc-system/client-mems/mems-dashboard-component/dist/
 .npm/
 .pnp
 .pnp.js
@@ -54,6 +57,7 @@ arc-system/client-mems/mems-dashboard-component/dist/
 .env.test.local
 .env.production.local
 credentials_summary.txt
+rats_secrets.local.bat
 *.secret
 *.key
 
