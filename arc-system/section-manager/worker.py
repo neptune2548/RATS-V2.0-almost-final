@@ -22,6 +22,7 @@ Known machine limitations (ASM iHawk Xpress GOCU):
 """
 
 import argparse
+import gzip
 import json
 import logging
 import os
@@ -607,14 +608,18 @@ def _handle_pull_recipe(host, machine_id, cmd):
             else:
                 file_bytes = str(ppbody).encode("latin-1")
 
-            # A real PWB contains structured program data and is never a few
-            # bytes long.  A short S7F6 body usually means the equipment sent
-            # an error/empty value that secsgem decoded as a scalar.  Never let
-            # that response overwrite a valid Host recipe.
-            if len(file_bytes) < 1024:
+            # A S7F6 reply alone is not proof that the equipment returned a
+            # PWB.  Some iHawk firmware replies with a small metadata/None
+            # placeholder.  Validate the actual (possibly gzip-compressed)
+            # program payload before touching the Host repository.
+            try:
+                pwb_content = gzip.decompress(file_bytes)
+            except (gzip.BadGzipFile, EOFError, OSError):
+                pwb_content = file_bytes
+            if len(file_bytes) < 1024 or b"Program Name" not in pwb_content:
                 msg = {
-                    "EN": f"Rejected invalid recipe payload for '{target_recipe}' ({len(file_bytes)} bytes; decoded as {type(ppbody).__name__}). Existing Host file was not changed.",
-                    "TH": f"ปฏิเสธข้อมูลสูตร '{target_recipe}' ที่ผิดปกติ ({len(file_bytes)} ไบต์; ถอดรหัสเป็น {type(ppbody).__name__}) ไฟล์เดิมบน Host ไม่ถูกแก้ไข",
+                    "EN": f"Equipment did not return a valid PWB for '{target_recipe}' (S7F6: {len(response_s7f5.data)} bytes, payload: {len(file_bytes)} bytes, decoded as {type(ppbody).__name__}). Existing Host file was not changed.",
+                    "TH": f"เครื่องจักรไม่ได้ส่งไฟล์ PWB ที่ถูกต้องสำหรับ '{target_recipe}' (S7F6: {len(response_s7f5.data)} ไบต์, payload: {len(file_bytes)} ไบต์, ถอดรหัสเป็น {type(ppbody).__name__}) ไฟล์เดิมบน Host ไม่ถูกแก้ไข",
                 }
                 log(machine_id, msg, "ALERT")
                 write_command_result(machine_id, "error", msg)
