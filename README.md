@@ -138,6 +138,8 @@ Run it with a network connection the first time. The installer requests Administ
 
 Generated credentials are stored in `rats_secrets.local.bat`, which is excluded from Git. Back it up in the approved password store. Copy the matching Recipe Bot and deployment tokens into the relevant equipment-side configuration during deployment.
 
+If the server was copied manually instead of installed with the setup script, `start_command_center.bat` automatically runs `configure_rats_secrets.bat` once and shows the generated Operator password in that launcher window.
+
 ### Existing/development server
 
 For local/development operation:

@@ -74,6 +74,9 @@ call :generate_secret RATS_DEPLOY_TOKEN
   echo set "RATS_DEPLOY_TOKEN=%RATS_DEPLOY_TOKEN%"
 ) > "rats_secrets.local.bat"
 echo Created rats_secrets.local.bat with unique random values.
+echo Login username: operator
+echo Login password: %RATS_OPERATOR_PASSWORD%
+echo Save this password in the approved password store now.
 goto secrets_done
 
 :secrets_exist
