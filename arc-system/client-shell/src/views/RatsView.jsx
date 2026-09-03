@@ -325,6 +325,16 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
   const handlePullRecipe = async () => {
     if (!activeMachine.id) return;
     setActionStatus({ type: 'PULL', status: 'RUNNING', msg: `Executing Recipe Pull for ${activeMachine.name}...` });
+    setEventLogs(prev => [...prev, {
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      machine_id: activeMachine.id,
+      production_section: machineSectionId(activeMachine),
+      message: {
+        EN: `Starting Recipe Pull for ${activeMachine.name}...`,
+        TH: `กำลังเริ่มดึงสูตร (PULL) สำหรับ ${activeMachine.name}...`,
+      },
+    }].slice(-100));
 
     try {
       const res = await fetch(`${RATS_API_BASE}/api/machines/${encodeURIComponent(activeMachine.id)}/pull`, {
@@ -337,6 +347,7 @@ export const RatsView = ({ onRequireElevatedAuth }) => {
         return;
       }
       const data = await res.json();
+      if (data.events) setEventLogs(data.events);
       if (data.result && data.result.status === 'ok') {
         setActionStatus({ type: 'PULL', status: 'SUCCESS', msg: `Recipe Pull SUCCESS for ${activeMachine.name}` });
         setMachines(prev => prev.map(m => m.id === activeMachine.id ? { ...m, link_status: 'ONLINE' } : m));
