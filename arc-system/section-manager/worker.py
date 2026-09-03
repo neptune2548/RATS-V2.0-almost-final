@@ -606,6 +606,19 @@ def _handle_pull_recipe(host, machine_id, cmd):
                     file_bytes = joined_str.encode("latin-1")
             else:
                 file_bytes = str(ppbody).encode("latin-1")
+
+            # A real PWB contains structured program data and is never a few
+            # bytes long.  A short S7F6 body usually means the equipment sent
+            # an error/empty value that secsgem decoded as a scalar.  Never let
+            # that response overwrite a valid Host recipe.
+            if len(file_bytes) < 1024:
+                msg = {
+                    "EN": f"Rejected invalid recipe payload for '{target_recipe}' ({len(file_bytes)} bytes; decoded as {type(ppbody).__name__}). Existing Host file was not changed.",
+                    "TH": f"ปฏิเสธข้อมูลสูตร '{target_recipe}' ที่ผิดปกติ ({len(file_bytes)} ไบต์; ถอดรหัสเป็น {type(ppbody).__name__}) ไฟล์เดิมบน Host ไม่ถูกแก้ไข",
+                }
+                log(machine_id, msg, "ALERT")
+                write_command_result(machine_id, "error", msg)
+                return
                 
             save_directory = str(_PROJECT_ROOT / "BondingProg")
             os.makedirs(save_directory, exist_ok=True)
