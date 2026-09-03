@@ -1294,21 +1294,23 @@ async def receive_proxy_recipe(
 
     source_filename = Path(x_source_filename or "NPGM.PWB").name
     try:
-        source_modified_ms = int(x_source_modified_ms or "0")
+        source_modified_ms = int(x_source_modified_ms) if x_source_modified_ms else None
     except ValueError:
         raise HTTPException(status_code=422, detail="Invalid Recipe Bot source modification timestamp")
-    if source_modified_ms <= 0:
-        raise HTTPException(status_code=422, detail="Recipe Bot source modification timestamp is required")
     # Reject obviously corrupt values while retaining enough range for minor
     # equipment-clock drift.  The value is intentionally treated as UTC epoch.
-    if source_modified_ms > int(time.time() * 1000) + 366 * 24 * 60 * 60 * 1000:
+    if source_modified_ms is not None and source_modified_ms <= 0:
+        raise HTTPException(status_code=422, detail="Invalid Recipe Bot source modification timestamp")
+    if source_modified_ms is not None and source_modified_ms > int(time.time() * 1000) + 366 * 24 * 60 * 60 * 1000:
         raise HTTPException(status_code=422, detail="Recipe Bot source modification timestamp is implausibly far in the future")
     existing = _find_recipe_by_ppid(ppid)
 
     if existing is None:
         destination = RECIPE_DIR / f"{ppid}.PWB"
         _atomic_write(destination, data)
-        _write_recipe_metadata(destination, incoming_sha256, source_modified_ms, x_machine_id)
+        # Older Bots do not send a source time.  New PPIDs remain safe to
+        # accept during a staged fleet rollout; use receipt time as baseline.
+        _write_recipe_metadata(destination, incoming_sha256, source_modified_ms or int(time.time() * 1000), x_machine_id)
         add_event({
             "EN": f"New recipe '{ppid}' received from {x_machine_id} and saved to the host.",
             "TH": f"ได้รับสูตรใหม่ '{ppid}' จาก {x_machine_id} และบันทึกในโฮสต์แล้ว",
@@ -1336,6 +1338,17 @@ async def receive_proxy_recipe(
         })
 
     host_modified_ms = _recipe_version_timestamp_ms(existing, existing_sha256)
+    if source_modified_ms is None:
+        add_event({
+            "EN": f"Recipe '{ppid}' from {x_machine_id} differs, but this Recipe Bot does not provide a source timestamp; host file retained.",
+            "TH": f"สูตร '{ppid}' จาก {x_machine_id} มีข้อมูลต่างกัน แต่ Recipe Bot รุ่นนี้ไม่ส่งเวลาแก้ไข จึงเก็บไฟล์บนโฮสต์ไว้",
+        }, "ALERT")
+        await broadcast_state()
+        return JSONResponse({
+            "status": "timestamp_required",
+            "ppid": ppid,
+            "filename": existing.name,
+        })
     if source_modified_ms <= host_modified_ms:
         add_event({
             "EN": f"Recipe '{ppid}' from {x_machine_id} differs, but its source timestamp is not newer than the host copy; host file retained.",
