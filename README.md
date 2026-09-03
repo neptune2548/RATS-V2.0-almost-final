@@ -140,6 +140,8 @@ Generated credentials are stored in `rats_secrets.local.bat`, which is excluded 
 
 If the server was copied manually instead of installed with the setup script, `start_command_center.bat` automatically runs `configure_rats_secrets.bat` once and shows the generated Operator password in that launcher window.
 
+When replacing or adding a RATS server for an existing equipment fleet, securely copy `rats_secrets.local.bat` from the established RATS server to the same repository folder on the replacement server before startup. This preserves the Operator, Technician, Administrator, and Developer passwords and keeps the Recipe Bot and deployment tokens aligned with the equipment PCs. Do not place this file in Git.
+
 ### Existing/development server
 
 For local/development operation:

@@ -31,10 +31,16 @@ echo.
 echo Save this password in the approved password store now.
 echo The server-only secret file is: rats_secrets.local.bat
 echo ============================================================
-exit /b 0
+goto finish
 
 :already_configured
 echo RATS server secrets already exist. No values were changed.
+echo Open rats_secrets.local.bat in Notepad on this server to view the role passwords.
+
+:finish
+if /I "%~1"=="--quiet" exit /b 0
+echo.
+pause
 exit /b 0
 
 :generate_secret

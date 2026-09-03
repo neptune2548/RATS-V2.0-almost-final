@@ -2,7 +2,7 @@
 TITLE ARC Industrial Command Center — Master Launcher v0.3
 color 0B
 
-if not exist "%~dp0rats_secrets.local.bat" call "%~dp0configure_rats_secrets.bat"
+if not exist "%~dp0rats_secrets.local.bat" call "%~dp0configure_rats_secrets.bat" --quiet
 if not exist "%~dp0rats_secrets.local.bat" (
     echo ERROR: RATS server credentials could not be created.
     pause
